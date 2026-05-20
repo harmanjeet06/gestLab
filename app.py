@@ -108,7 +108,7 @@ def prepara_scambio(chiave):
     st.session_state.target_scambio = chiave
 
 def gestisci_manutenzione(chiave, azione):
-    if azione == "attiva":
+    if action == "attiva":
         if chiave in st.session_state.prenotazioni:
             del st.session_state.prenotazioni[chiave]
         st.session_state.manutenzioni[chiave] = "Sospensione Tecnica"
@@ -159,17 +159,15 @@ else:
     ruolo = st.session_state.ruolo
     utente_attivo = st.session_state.utente_attivo
 
-    # Barra laterale classica (Sinistra)
-    st.sidebar.title("🧬 GestLab v1.9")
+    # Barra laterale classica (Sinistra) - UX Pulita: Solo Logout e Aggiorna DB sicuro
+    st.sidebar.title("🧬 GestLab v2.0")
     st.sidebar.write(f"Utente: **{utente_attivo}**")
     st.sidebar.write(f"Ruolo: `{ruolo}`")
-    if st.sidebar.button("🚪 Esci"):
+    if st.sidebar.button("🚪 Esci dal sistema", use_container_width=True):
         st.session_state.autenticato = False
         st.rerun()
-    if st.sidebar.button("🗑️ Svuota Cache e Reset"):
+    if st.sidebar.button("🔄 Aggiorna Dati Sheets", use_container_width=True):
         st.cache_data.clear()
-        st.session_state.scambi = []  # Pulisce i vecchi scambi corrotti
-        st.session_state.prenotazioni = {}
         st.rerun()
 
     # LAYOUT STRUTTURATO (Tabellone a sinistra, Notifiche a destra)
@@ -305,15 +303,20 @@ else:
                         st.info("👉 Fai clic sul pulsante rosso di un collega sul tabellone in alto per avviare una richiesta di scambio.")
 
                 with tab_storico:
-                    mie_richieste = [s for s in st.session_state.scambi if s["da"] == utente_attivo]
+                    mie_richieste = [s for s in st.session_state.scambi if s.get("da") == utente_attivo]
                     st.write("#### 📤 Stato delle richieste che hai inviato ai colleghi")
                     if not mie_richieste:
                         st.write("*Non hai inviato nessuna richiesta.*")
                     for r in mie_richieste:
-                        colore_stato = "🟡" if "In attesa" in r.get("stato", "In attesa") else ("🟢" if "Accettato" in r.get("stato", "") else "🔴")
-                        # [RISOLTO CON GET E DEFAULT]: Gestisce in sicurezza sia i nuovi record che quelli vecchi
-                        data_stringa = r["data"].strftime('%d/%m') if "data" in r and r["data"] else datetime.date.today().strftime('%d/%m')
-                        st.write(f"{colore_stato} Per **{r.get('lab', 'N/D')}** ({r.get('ora', 'N/D')}) del {data_stringa} inviata a **{r.get('a', 'Collega')}** $\rightarrow$ Stato: **{r.get('stato', 'In attesa')}**")
+                        # PROTEZIONE DA DATI CORROTTI SULLO STORICO INVIATO
+                        stato_pulito = r.get("stato", "In attesa")
+                        colore_stato = "🟡" if "In attesa" in stato_pulito else ("🟢" if "Accettato" in stato_pulito else "🔴")
+                        
+                        # Se la data è assente nei log vecchi, usa la data odierna per non crashare
+                        reg_data = r["data"] if "data" in r and r["data"] else datetime.date.today()
+                        data_stringa = reg_data.strftime('%d/%m') if hasattr(reg_data, 'strftime') else str(reg_data)
+                        
+                        st.write(f"{colore_stato} Per **{r.get('lab', 'N/D')}** ({r.get('ora', 'N/D')}) del {data_stringa} inviata a **{r.get('a', 'Collega')}** $\rightarrow$ Stato: **{stato_pulito}**")
 
             elif ruolo == "Studente":
                 st.write("### 🔍 Cerca la tua lezione")
@@ -332,7 +335,11 @@ else:
         st.divider()
         
         if ruolo == "Professore":
-            richieste_ricevute = [idx for idx, s in enumerate(st.session_state.scambi) if s.get("a") == utente_attivo and s.get("stato") == "In attesa"]
+            # PROTEZIONE DA DATI CORROTTI SUL FILTRO RICEVUTI
+            richieste_ricevute = [
+                idx for idx, s in enumerate(st.session_state.scambi) 
+                if isinstance(s, dict) and s.get("a") == utente_attivo and "In attesa" in s.get("stato", "In attesa")
+            ]
             
             if not richieste_ricevute:
                 st.info("🟢 Nessuna richiesta in sospeso.")
@@ -343,16 +350,17 @@ else:
                         st.write(f"**Aula:** {req.get('lab', 'N/D')}")
                         st.write(f"**Ora:** {req.get('ora', 'N/D')}")
                         
-                        if "data" in req and req["data"]:
-                            st.write(f"**Giorno:** {req['data'].strftime('%d/%m/%Y')}")
+                        # Controllo di sicurezza sulla data
+                        r_data = req.get('data', datetime.date.today())
+                        if hasattr(r_data, 'strftime'):
+                            st.write(f"**Giorno:** {r_data.strftime('%d/%m/%Y')}")
                         
                         st.write(f"*Messaggio:* {req.get('nota', '')}")
                         st.write("---")
                         
                         # Tasto per Accettare lo scambio
                         if st.button("✅ Accetta", key=f"acc_{idx}", use_container_width=True):
-                            # Salva in sicurezza prendendo la data corrente se manca
-                            r_data = req.get('data', datetime.date.today())
+                            # Ricostruisce la chiave target in piena sicurezza
                             chiave_target = (r_data, req.get('lab'), req.get('ora'))
                             
                             st.session_state.prenotazioni[chiave_target] = {"prof": req.get('da'), "motivo": "Scambio Concesso"}
