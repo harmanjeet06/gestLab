@@ -147,7 +147,7 @@ def prepara_admin_delete(chiave):
 
 def mostra_dettagli_studente(chiave):
     st.session_state.target_studente = chiave
-    st.session_state.scroll_counter += 1 # Cambia lo stato numerico per forzare l'esecuzione JS ad ogni clic
+    st.session_state.scroll_counter += 1
 
 def gestisci_manutenzione(chiave, azione):
     if azione == "attiva":
@@ -325,11 +325,9 @@ else:
             st.write("---")
 
             # ==========================================
-            # SEZIONE INFORMATIVA IN BASSO (CON SCROLL AUTOMATICO GARANTITO)
+            # SEZIONE INFORMATIVA IN BASSO
             # ==========================================
-            
             if ruolo == "Studente":
-                # Elemento target HTML pulito
                 st.markdown("<div id='scheda_dettagli_studente'></div>", unsafe_allow_html=True)
                 st.write("### 🔍 Scheda Informativa Aula Selezionata")
                 
@@ -351,17 +349,18 @@ else:
                             st.markdown("📝 **Attività:** Nessuna attività programmata")
                             st.markdown("🚦 **Stato:** 🟢 Libera")
                     
-                    # FORZATURA JS AD OGNI CLIC (Usa la chiave scroll_counter per rigenerarsi sempre)
-                    st.components.v1.html(f"""
-                        <script>
-                            setTimeout(function() {{
-                                var el = window.parent.document.getElementById('scheda_dettagli_studente');
-                                if (el) {{
-                                    el.scrollIntoView({{behavior: 'smooth', block: 'start'}});
-                                }}
-                            }}, 100);
-                        </script>
-                    """, height=0, key=f"scroll_js_{st.session_state.scroll_counter}")
+                    # BLOCCO JAVASCRIPT CORRETTO SENZA F-STRING (Nessun Crash su Python 3.14)
+                    codice_js = """
+                    <script>
+                        setTimeout(function() {
+                            var el = window.parent.document.getElementById('scheda_dettagli_studente');
+                            if (el) {
+                                el.scrollIntoView({behavior: 'smooth', block: 'start'});
+                            }
+                        }, 100);
+                    </script>
+                    """
+                    st.components.v1.html(codice_js, height=0, key="scroll_js_" + str(st.session_state.scroll_counter))
                     
                 else:
                     st.info("💡 Fai clic su un bottone qualsiasi del tabellone sopra per vederne i dettagli qui.")
@@ -376,7 +375,7 @@ else:
                             st.success(f"📖 **{k[1]}** | Ora: **{k[2]}** -> Docente: **{v['prof']}** (Attività: *{v['motivo']}*)")
                             trovato = True
                     if not trovato:
-                        st.warning("Nessuna lezione trovata con questa chiave di ricerca per oggi.")
+                        st.warning("Nessuna lezione trouvata con questa chiave di ricerca per oggi.")
 
             # Modulo revoche Admin
             if ruolo == "Tecnico / Amministratore" and st.session_state.target_admin_delete:
