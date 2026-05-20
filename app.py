@@ -59,7 +59,6 @@ elenco_classi = carica_classi_da_sheets()
 # --- COSTRUTTORE STRUTTURA ORARI ---
 GIORNI = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"]
 LABORATORI = ["Sistel Info", "AutoCAD"]
-
 def get_orari_per_giorno(giorno):
     if giorno in ["Martedì", "Venerdì"]:
         return [
@@ -76,7 +75,7 @@ def get_orari_per_giorno(giorno):
             {"ora": "1ª ora", "inizio": "08:00", "fine": "09:00", "prenotabile": True},
             {"ora": "2ª ora", "inizio": "09:00", "fine": "10:00", "prenotabile": True},
             {"ora": "3ª ora", "inizio": "10:00", "fine": "10:55", "prenotabile": True},
-            {"ora": "Intervallo", "looking": "10:55", "fine": "11:10", "prenotabile": False},
+            {"ora": "Intervallo", "inizio": "10:55", "fine": "11:10", "prenotabile": False},  # <--- CORRETTO QUI!
             {"ora": "4ª ora", "inizio": "11:10", "fine": "12:10", "prenotabile": True},
             {"ora": "5ª ora", "inizio": "12:10", "fine": "13:10", "prenotabile": True},
         ]
