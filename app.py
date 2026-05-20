@@ -101,21 +101,45 @@ def get_orari_per_giorno(giorno):
 # --- FUNZIONI DI CALLBACK ---
 def esegui_prenotazione(chiave, prof):
     st.session_state.prenotazioni[chiave] = {"prof": prof, "motivo": "Lezione Didattica"}
+    
+    # 1. Notifica di conferma personale per chi ha prenotato
     st.session_state.notifiche_sistema.append({
         "destinatario": prof,
         "tipo": "Conferma",
         "messaggio": f"Hai prenotato con successo il laboratorio **{chiave[1]}** per la **{chiave[2]}** del {chiave[0].strftime('%d/%m')}."
     })
+    
+    # 2. NOTIFICA BROADCAST: Avvisa tutti gli altri docenti della nuova prenotazione
+    for username, dati in dizionario_utenti.items():
+        nominativo_collega = dati.get("nominativo")
+        if nominativo_collega and nominativo_collega != prof:
+            st.session_state.notifiche_sistema.append({
+                "destinatario": nominativo_collega,
+                "tipo": "📢 Nuova Prenotazione",
+                "messaggio": f"Il collega **{prof}** ha appena occupato il laboratorio **{chiave[1]}** alla **{chiave[2]}** del {chiave[0].strftime('%d/%m')}."
+            })
 
 def cancella_prenotazione(chiave):
     if chiave in st.session_state.prenotazioni:
         prof = st.session_state.prenotazioni[chiave]["prof"]
         del st.session_state.prenotazioni[chiave]
+        
+        # Notifica personale di cancellazione
         st.session_state.notifiche_sistema.append({
             "destinatario": prof,
             "tipo": "Cancellazione",
             "messaggio": f"Hai cancellato la tua prenotazione per **{chiave[1]}** ({chiave[2]}) del {chiave[0].strftime('%d/%m')}."
         })
+        
+        # Notifica ai colleghi che l'aula è tornata libera
+        for username, dati in dizionario_utenti.items():
+            nominativo_collega = dati.get("nominativo")
+            if nominativo_collega and nominativo_collega != prof:
+                st.session_state.notifiche_sistema.append({
+                    "destinatario": nominativo_collega,
+                    "tipo": "🟢 Aula Liberata",
+                    "messaggio": f"Il laboratorio **{chiave[1]}** alla **{chiave[2]}** del {chiave[0].strftime('%d/%m')} è tornato **disponibile** (cancellata da {prof})."
+                })
 
 def prepara_scambio(chiave):
     st.session_state.target_scambio = chiave
@@ -125,12 +149,10 @@ def prepara_admin_delete(chiave):
 
 def gestisci_manutenzione(chiave, azione):
     if azione == "attiva":
-        # Se l'aula era occupata da un prof, lo salviamo per mandargli la notifica di blocco improvviso
         if chiave in st.session_state.prenotazioni:
             prof_colpito = st.session_state.prenotazioni[chiave]["prof"]
             del st.session_state.prenotazioni[chiave]
             
-            # Genera la notifica automatica di blocco/guasto per il prof
             st.session_state.notifiche_sistema.append({
                 "destinatario": prof_colpito,
                 "tipo": "🚨 AULA BLOCCATA",
@@ -186,7 +208,7 @@ else:
     utente_attivo = st.session_state.utente_attivo
 
     # Barra laterale (Sinistra)
-    st.sidebar.title("🧬 GestLab v2.2")
+    st.sidebar.title("🧬 GestLab v2.3")
     st.sidebar.write(f"Utente: **{utente_attivo}**")
     st.sidebar.write(f"Ruolo: `{ruolo}`")
     if st.sidebar.button("🚪 Esci dal sistema", use_container_width=True):
@@ -393,7 +415,7 @@ else:
     with col_notifiche_destra:
         st.write("### 🔔 Bacheca Notifiche")
         
-        # 1. SEZIONE LOG COMPLETO DI CONFERME / CANCELLAZIONI / AZIONI ADMIN / BLOCCHI AULA
+        # 1. SEZIONE LOG COMPLETO DI CONFERME / CANCELLAZIONI / AZIONI ADMIN / ATTIVITÀ COLLEGHI
         if ruolo == "Professore" or ruolo == "Tecnico / Amministratore":
             mie_notifiche_scuola = [n for n in st.session_state.notifiche_sistema if n["destinatario"] == utente_attivo]
             if mie_notifiche_scuola:
@@ -401,7 +423,9 @@ else:
                 for n in reversed(mie_notifiche_scuola):  # Mostra le più recenti in alto
                     if "🚨" in n["tipo"]:
                         st.error(f"**{n['tipo']}**\n\n{n['messaggio']}")
-                    elif "Cancellazione" in n["tipo"]:
+                    elif "📢" in n["tipo"]:
+                        st.info(f"**{n['tipo']}**\n\n{n['messaggio']}")
+                    elif "Cancellazione" in n["tipo"] or "🟢" in n["tipo"]:
                         st.warning(f"**{n['tipo']}**\n\n{n['messaggio']}")
                     else:
                         st.success(f"**{n['tipo']}**\n\n{n['messaggio']}")
