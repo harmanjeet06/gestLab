@@ -67,9 +67,10 @@ if "manutenzioni" not in st.session_state: st.session_state.manutenzioni = {}
 if "scambi" not in st.session_state: st.session_state.scambi = []
 if "notifiche_sistema" not in st.session_state: st.session_state.notifiche_sistema = []
 
-# Supporto per mirare lo scambio o la cancellazione admin
+# Supporti target d'azione
 if "target_scambio" not in st.session_state: st.session_state.target_scambio = None
 if "target_admin_delete" not in st.session_state: st.session_state.target_admin_delete = None
+if "target_studente" not in st.session_state: st.session_state.target_studente = None
 
 dizionario_utenti = carica_utenti_da_sheets()
 elenco_classi = carica_classi_da_sheets()
@@ -102,14 +103,12 @@ def get_orari_per_giorno(giorno):
 def esegui_prenotazione(chiave, prof):
     st.session_state.prenotazioni[chiave] = {"prof": prof, "motivo": "Lezione Didattica"}
     
-    # 1. Notifica di conferma personale per chi ha prenotato
     st.session_state.notifiche_sistema.append({
         "destinatario": prof,
         "tipo": "Conferma",
         "messaggio": f"Hai prenotato con successo il laboratorio **{chiave[1]}** per la **{chiave[2]}** del {chiave[0].strftime('%d/%m')}."
     })
     
-    # 2. NOTIFICA BROADCAST: Avvisa tutti gli altri docenti della nuova prenotazione
     for username, dati in dizionario_utenti.items():
         nominativo_collega = dati.get("nominativo")
         if nominativo_collega and nominativo_collega != prof:
@@ -124,14 +123,12 @@ def cancella_prenotazione(chiave):
         prof = st.session_state.prenotazioni[chiave]["prof"]
         del st.session_state.prenotazioni[chiave]
         
-        # Notifica personale di cancellazione
         st.session_state.notifiche_sistema.append({
             "destinatario": prof,
             "tipo": "Cancellazione",
             "messaggio": f"Hai cancellato la tua prenotazione per **{chiave[1]}** ({chiave[2]}) del {chiave[0].strftime('%d/%m')}."
         })
         
-        # Notifica ai colleghi che l'aula è tornata libera
         for username, dati in dizionario_utenti.items():
             nominativo_collega = dati.get("nominativo")
             if nominativo_collega and nominativo_collega != prof:
@@ -146,6 +143,9 @@ def prepara_scambio(chiave):
 
 def prepara_admin_delete(chiave):
     st.session_state.target_admin_delete = chiave
+
+def mostra_dettagli_studente(chiave):
+    st.session_state.target_studente = chiave
 
 def gestisci_manutenzione(chiave, azione):
     if azione == "attiva":
@@ -208,11 +208,12 @@ else:
     utente_attivo = st.session_state.utente_attivo
 
     # Barra laterale (Sinistra)
-    st.sidebar.title("🧬 GestLab v2.3")
+    st.sidebar.title("🧬 GestLab v2.4")
     st.sidebar.write(f"Utente: **{utente_attivo}**")
     st.sidebar.write(f"Ruolo: `{ruolo}`")
     if st.sidebar.button("🚪 Esci dal sistema", use_container_width=True):
         st.session_state.autenticato = False
+        st.session_state.target_studente = None
         st.rerun()
     if st.sidebar.button("🔄 Aggiorna Dati Sheets", use_container_width=True):
         st.cache_data.clear()
@@ -223,7 +224,10 @@ else:
 
     with col_main:
         st.title("🖥️ Tabellone Orari Interattivo")
-        st.write("👉 Clicca su `🟢 LIBERO` per prenotare o sul tuo bottone rosso per agire sulla prenotazione.")
+        if ruolo == "Studente":
+            st.write("👉 **Clicca su qualsiasi pulsante colorato** del tabellone per vederne i dettagli e il nome completo del docente in basso.")
+        else:
+            st.write("👉 Clicca su `🟢 LIBERO` per prenotare o sul tuo bottone rosso per agire sulla prenotazione.")
         st.divider()
 
         data_selezionata = st.date_input("Seleziona Data:", datetime.date.today())
@@ -257,21 +261,32 @@ else:
                             st.button("☕ Intervallo", key=f"int_{laboratorio}_{slot['ora']}", disabled=True, use_container_width=True)
                         
                         elif chiave in st.session_state.manutenzioni:
+                            testo_pulsante = "🔧 GUASTO \n[Vedi info]" if ruolo == "Studente" else "🔧 GUASTO \n[Sblocca]"
                             st.button(
-                                "🔧 GUASTO \n[Sblocca]", 
+                                testo_pulsante, 
                                 key=f"btn_{chiave}", 
                                 type="secondary", 
                                 use_container_width=True,
-                                disabled=(ruolo != "Tecnico / Amministratore"),
-                                on_click=gestisci_manutenzione,
-                                args=(chiave, "disattiva")
+                                disabled=(ruolo != "Tecnico / Amministratore" and ruolo != "Studente"),
+                                on_click=mostra_dettagli_studente if ruolo == "Studente" else gestisci_manutenzione,
+                                args=(chiave, "disattiva") if ruolo != "Studente" else (chiave,)
                             )
                         
                         elif chiave in st.session_state.prenotazioni:
                             proprietario = st.session_state.prenotazioni[chiave]['prof']
                             motivo_pren = st.session_state.prenotazioni[chiave]['motivo']
                             
-                            if ruolo == "Tecnico / Amministratore":
+                            if ruolo == "Studente":
+                                # Lo studente vede l'aula occupata e può cliccarci
+                                st.button(
+                                    f"🔴 {proprietario[:10]} \n[Dettagli]", 
+                                    key=f"btn_{chiave}", 
+                                    type="secondary", 
+                                    use_container_width=True,
+                                    on_click=mostra_dettagli_studente,
+                                    args=(chiave,)
+                                )
+                            elif ruolo == "Tecnico / Amministratore":
                                 st.button(
                                     f"💥 {proprietario[:10]} \n[REVOCA ADMIN]", 
                                     key=f"btn_{chiave}", 
@@ -304,12 +319,52 @@ else:
                             elif ruolo == "Tecnico / Amministratore":
                                 st.button("🟢 LIBERO \n[Blocca Aula]", key=f"btn_{chiave}", type="primary", use_container_width=True, on_click=gestisci_manutenzione, args=(chiave, "attiva"))
                             else:
-                                st.button("🟢 LIBERO", key=f"btn_{chiave}", type="primary", use_container_width=True, disabled=True)
+                                # Lo studente può cliccare anche su un'aula libera per avere conferma
+                                st.button("🟢 LIBERO \n[Info]", key=f"btn_{chiave}", type="primary", use_container_width=True, on_click=mostra_dettagli_studente, args=(chiave,))
             st.write("---")
 
             # ==========================================
-            # PANNELLO STRUMENTI IN BASSO
+            # PANNELLO STRUMENTI IN BASSO / SEZIONE DETTAGLI
             # ==========================================
+            
+            # --- NUOVA SEZIONE: DETTAGLI ESPANDIBILI PER STUDENTI ---
+            if ruolo == "Studente":
+                st.markdown("<div id='sezione_info'></div>", unsafe_allow_html=True) # Ancoraggio visivo
+                st.write("### 🔍 Scheda Informativa Aula Selezionata")
+                
+                if st.session_state.target_studente:
+                    s_data, s_lab, s_ora = st.session_state.target_studente
+                    st.info(f"📍 Hai selezionato: **Laboratorio {s_lab}** alla **{s_ora}** di oggi ({s_data.strftime('%d/%m/%Y')})")
+                    
+                    with st.container(border=True):
+                        if st.session_state.target_studente in st.session_state.prenotazioni:
+                            dati_p = st.session_state.prenotazioni[st.session_state.target_studente]
+                            st.markdown(f"👤 **Professore incaricato (Nome Completo):** `{dati_p['prof']}`")
+                            st.markdown(f"📝 **Attività / Classe e Materia:** {dati_p['motivo']}")
+                            st.markdown("🚦 **Stato attuale:** 🔴 Occupata regolarmente.")
+                        elif st.session_state.target_studente in st.session_state.manutenzioni:
+                            st.markdown("👤 **Responsabile:** `Ufficio Tecnico / Amministratore`")
+                            st.markdown("📝 **Attività:** Intervento di manutenzione hardware/software o blocco cautelativo.")
+                            st.markdown("🚦 **Stato attuale:** 🔧 **NON ACCESSIBILE (GUASTO)**")
+                        else:
+                            st.markdown("👤 **Professore:** `Nessuno`")
+                            st.markdown("📝 **Attività:** Nessuna lezione programmata in questa fascia oraria.")
+                            st.markdown("🚦 **Stato attuale:** 🟢 **LIBERO** (Disponibile per studi o supplenze).")
+                else:
+                    st.info("💡 Fai clic su un pulsante qualsiasi del tabellone sopra per caricare qui i dettagli completi su prof e attività.")
+                
+                st.divider()
+                st.write("#### 🔎 Vuoi fare una ricerca rapida?")
+                testo = st.text_input("Inserisci la tua classe o materia per cercare dove fare lezione:", placeholder="Es: 5CE, Informatica, Sistemi...")
+                if testo:
+                    trovato = False
+                    for k, v in st.session_state.prenotazioni.items():
+                        if testo.lower() in v["motivo"].lower() and k[0] == data_selezionata:
+                            st.success(f"📖 **{k[1]}** | Ora: **{k[2]}** -> Docente: **{v['prof']}** (Attività: *{v['motivo']}*)")
+                            trovato = True
+                    if not trovato:
+                        st.warning("Nessuna lezione trovata con questa chiave di ricerca per oggi.")
+
             if ruolo == "Tecnico / Amministratore" and st.session_state.target_admin_delete:
                 st.error("### ⚠️ Modulo di Cancellazione d'Ufficio (Amministratore)")
                 t_data, t_lab, t_ora = st.session_state.target_admin_delete
@@ -347,7 +402,7 @@ else:
                     mie_p = [k for k, v in st.session_state.prenotazioni.items() if v["prof"] == utente_attivo and k[0] == data_selezionata]
                     if mie_p:
                         scelta_p = st.selectbox("Personalizza la descrizione di una tua ora di oggi:", mie_p, format_func=lambda x: f"{x[1]} alla {x[2]}")
-                        nuovo_motivo = st.text_input("Classe e Materia:", value=st.session_state.prenotazioni[scelta_p]["motivo"])
+                        nuovo_motivo = st.text_input("Classe e Materia (Inserisci dettagli chiari per gli studenti):", value=st.session_state.prenotazioni[scelta_p]["motivo"])
                         if st.button("Aggiorna sul Tabellone"):
                             st.session_state.prenotazioni[scelta_p]["motivo"] = nuovo_motivo
                             st.success("Tabellone aggiornato!")
@@ -401,26 +456,17 @@ else:
                         data_stringa = reg_data.strftime('%d/%m') if hasattr(reg_data, 'strftime') else str(reg_data)
                         st.write(f"{colore_stato} Per **{r.get('lab', 'N/D')}** ({r.get('ora', 'N/D')}) del {data_stringa} inviata a **{r.get('a', 'Collega')}** $\rightarrow$ Stato: **{stato_pulito}**")
 
-            elif ruolo == "Studente":
-                st.write("### 🔍 Cerca la tua lezione")
-                testo = st.text_input("Inserisci classe o materia:")
-                if testo:
-                    for k, v in st.session_state.prenotazioni.items():
-                        if testo.lower() in v["motivo"].lower() and k[0] == data_selezionata:
-                            st.write(f"📖 **{k[1]}** | Ora: **{k[2]}** -> Docente: {v['prof']} ({v['motivo']})")
-
     # --------------------------------------------------
     # COLONNA DI DESTRA: CENTRO NOTIFICHE INTERATTIVO & AVVISI
     # --------------------------------------------------
     with col_notifiche_destra:
         st.write("### 🔔 Bacheca Notifiche")
         
-        # 1. SEZIONE LOG COMPLETO DI CONFERME / CANCELLAZIONI / AZIONI ADMIN / ATTIVITÀ COLLEGHI
         if ruolo == "Professore" or ruolo == "Tecnico / Amministratore":
             mie_notifiche_scuola = [n for n in st.session_state.notifiche_sistema if n["destinatario"] == utente_attivo]
             if mie_notifiche_scuola:
                 st.write("##### 📢 Avvisi di Sistema")
-                for n in reversed(mie_notifiche_scuola):  # Mostra le più recenti in alto
+                for n in reversed(mie_notifiche_scuola):
                     if "🚨" in n["tipo"]:
                         st.error(f"**{n['tipo']}**\n\n{n['messaggio']}")
                     elif "📢" in n["tipo"]:
@@ -434,7 +480,6 @@ else:
                     st.rerun()
                 st.divider()
 
-        # 2. GESTIONE DIRETTA DELLE RICHIESTE DI SCAMBIO RICEVUTE
         if ruolo == "Professore":
             st.write("##### 🔄 Richieste di Scambio")
             richieste_ricevute = [
@@ -469,7 +514,7 @@ else:
                             st.toast("Scambio approvato!")
                             st.rerun()
                         
-                        motivo_rifiuto = st.text_input("Motivo del rifiuto:", key=f"mot_{idx}", placeholder="Es: Ho una verifica...")
+                        motivo_rifiuto = st.text_input("Motivo del refusal:", key=f"mot_{idx}", placeholder="Es: Ho una verifica...")
                         if st.button("❌ Rifiuta Scambio", key=f"rif_{idx}", use_container_width=True):
                             if motivo_rifiuto.strip() == "":
                                 st.error("Inserisci una motivazione prima di rifiutare!")
@@ -483,4 +528,4 @@ else:
                                 st.toast("Scambio rifiutato.")
                                 st.rerun()
         else:
-            st.caption("Accedi come Docente per scambiare ore o come Admin per revocarle.")
+            st.caption("I dettagli dell'aula e le attività sono visualizzabili dagli studenti direttamente cliccando sul tabellone orari.")
