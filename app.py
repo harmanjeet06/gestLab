@@ -7,6 +7,16 @@ import json
 # --- CONFIGURAZIONE PAGINA ---
 st.set_page_config(page_title="GestLab Cloud Secure", layout="wide", initial_sidebar_state="expanded")
 
+# --- INSERIMENTO LOGO DELLA SCUOLA IN ALTO ---
+# Carica l'immagine caricata dall'utente (rinominata in 'logo_scuola.png' nella stessa cartella)
+if os.path.exists("logo_scuola.png"):
+    st.image("logo_scuola.png", use_container_width=True)
+else:
+    # Alternativa testuale elegante se l'immagine non viene trovata subito
+    st.markdown("### 🏛️ Istituto Superiore 'Antonio Scarpa' | MOTTA DI LIVENZA - ODERZO")
+
+st.markdown("---")
+
 # --- CSS PER I COLORI REALI DEI PULSANTI ---
 st.markdown("""
 <style>
@@ -32,11 +42,9 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- UTILITY: SALVATAGGIO PERSISTENTE SU FILE DEL SERVER ---
-# Salviamo le prenotazioni in un file locale per evitare che il refresh della pagina (F5) le cancelli.
 FILE_PRENOTAZIONI = "database_prenotazioni.json"
 
 def salva_prenotazioni_su_disco():
-    # Convertiamo le chiavi tuple (Data, Lab, Ora) in stringhe leggibili per il JSON
     dati_serializzabili = {}
     for chiave, info in st.session_state.prenotazioni.items():
         chiave_str = f"{chiave[0].isoformat()}||{chiave[1]}||{chiave[2]}"
@@ -95,7 +103,6 @@ if "autenticato" not in st.session_state: st.session_state.autenticato = False
 if "ruolo" not in st.session_state: st.session_state.ruolo = None
 if "utente_attivo" not in st.session_state: st.session_state.utente_attivo = None
 
-# Caricamento sicuro iniziale delle prenotazioni salvate
 if "prenotazioni" not in st.session_state: 
     st.session_state.prenotazioni = carica_prenotazioni_da_disco()
 
@@ -103,7 +110,6 @@ if "manutenzioni" not in st.session_state: st.session_state.manutenzioni = {}
 if "scambi" not in st.session_state: st.session_state.scambi = []
 if "notifiche_sistema" not in st.session_state: st.session_state.notifiche_sistema = []
 
-# Supporti target d'azione
 if "target_scambio" not in st.session_state: st.session_state.target_scambio = None
 if "target_admin_delete" not in st.session_state: st.session_state.target_admin_delete = None
 if "target_studente" not in st.session_state: st.session_state.target_studente = None
@@ -138,7 +144,7 @@ def get_orari_per_giorno(giorno):
 # --- FUNZIONI DI CALLBACK ---
 def esegui_prenotazione(chiave, prof):
     st.session_state.prenotazioni[chiave] = {"prof": prof, "motivo": "Lezione Didattica"}
-    salva_prenotazioni_su_disco() # Salva su file immediatamente
+    salva_prenotazioni_su_disco()
     
     st.session_state.notifiche_sistema.append({
         "destinatario": prof,
@@ -159,7 +165,7 @@ def cancella_prenotazione(chiave):
     if chiave in st.session_state.prenotazioni:
         prof = st.session_state.prenotazioni[chiave]["prof"]
         del st.session_state.prenotazioni[chiave]
-        salva_prenotazioni_su_disco() # Salva su file immediatamente
+        salva_prenotazioni_su_disco()
         
         st.session_state.notifiche_sistema.append({
             "destinatario": prof,
@@ -176,14 +182,9 @@ def cancella_prenotazione(chiave):
                     "messaggio": f"Il laboratorio **{chiave[1]}** alla **{chiave[2]}** del {chiave[0].strftime('%d/%m')} è tornato **disponibile** (cancellata da {prof})."
                 })
 
-def prepara_scambio(chiave):
-    st.session_state.target_scambio = chiave
-
-def prepara_admin_delete(chiave):
-    st.session_state.target_admin_delete = chiave
-
-def mostra_dettagli_studente(chiave):
-    st.session_state.target_studente = chiave
+def prepara_scambio(chiave): st.session_state.target_scambio = chiave
+def prepara_admin_delete(chiave): st.session_state.target_admin_delete = chiave
+def mostra_dettagli_studente(chiave): st.session_state.target_studente = chiave
 
 def gestisci_manutenzione(chiave, azione):
     if azione == "attiva":
@@ -247,7 +248,7 @@ else:
     utente_attivo = st.session_state.utente_attivo
 
     # Barra laterale (Sinistra)
-    st.sidebar.title("🧬 GestLab v2.8")
+    st.sidebar.title("🧬 GestLab v2.9")
     st.sidebar.write(f"Utente: **{utente_attivo}**")
     st.sidebar.write(f"Ruolo: `{ruolo}`")
     if st.sidebar.button("🚪 Esci dal sistema", use_container_width=True):
@@ -258,7 +259,7 @@ else:
         st.cache_data.clear()
         st.rerun()
 
-    # LAYOUT STRUTTURATO (Tabellone a sinistra, Notifiche a destra)
+    # LAYOUT STRUTTURATO
     col_main, col_notifiche_destra = st.columns([3, 1])
 
     with col_main:
@@ -360,9 +361,7 @@ else:
                                 st.button("🟢 LIBERO \n[Dettagli]", key=f"btn_{chiave}", type="primary", use_container_width=True, on_click=mostra_dettagli_studente, args=(chiave,))
             st.write("---")
 
-            # ==========================================
             # SEZIONE INFORMATIVA IN BASSO NATURALE
-            # ==========================================
             if ruolo == "Studente":
                 st.write("### 🔍 Scheda Informativa Aula Selezionata")
                 
@@ -397,7 +396,7 @@ else:
                             st.success(f"📖 **{k[1]}** | Ora: **{k[2]}** -> Docente: **{v['prof']}** (Attività: *{v['motivo']}*)")
                             trovato = True
                     if not trovato:
-                        st.warning("Nessuna lezione trouvata con questa chiave di ricerca per oggi.")
+                        st.warning("Nessuna lezione trovata con questa chiave di ricerca per oggi.")
 
             # Modulo revoche Admin
             if ruolo == "Tecnico / Amministratore" and st.session_state.target_admin_delete:
@@ -494,9 +493,7 @@ else:
                         data_stringa = reg_data.strftime('%d/%m') if hasattr(reg_data, 'strftime') else str(reg_data)
                         st.write(f"{colore_stato} Per **{r.get('lab', 'N/D')}** ({r.get('ora', 'N/D')}) del {data_stringa} inviata a **{r.get('a', 'Collega')}** $\rightarrow$ Stato: **{stato_pulito}**")
 
-    # --------------------------------------------------
-    # COLONNA DI DESTRA: CENTRO NOTIFICHE INTERATTIVO & AVVISI
-    # --------------------------------------------------
+    # COLONNA DI DESTRA: CENTRO NOTIFICHE
     with col_notifiche_destra:
         st.write("### 🔔 Bacheca Notifiche")
         
@@ -553,7 +550,7 @@ else:
                             st.toast("Scambio approvato!")
                             st.rerun()
                         
-                        motivo_rifiuto = st.text_input("Motivo del rotiuto:", key=f"mot_{idx}", placeholder="Es: Ho una verifica...")
+                        motivo_rifiuto = st.text_input("Motivo del rifiuto:", key=f"mot_{idx}", placeholder="Es: Ho una verifica...")
                         if st.button("❌ Rifiuta Scambio", key=f"rif_{idx}", use_container_width=True):
                             if motivo_rifiuto.strip() == "":
                                 st.error("Inserisci una motivazione prima di rifiutare!")
