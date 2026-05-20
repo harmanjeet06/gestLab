@@ -71,7 +71,7 @@ if "notifiche_sistema" not in st.session_state: st.session_state.notifiche_siste
 if "target_scambio" not in st.session_state: st.session_state.target_scambio = None
 if "target_admin_delete" not in st.session_state: st.session_state.target_admin_delete = None
 if "target_studente" not in st.session_state: st.session_state.target_studente = None
-if "scroll_richiesto" not in st.session_state: st.session_state.scroll_richiesto = False
+if "scroll_counter" not in st.session_state: st.session_state.scroll_counter = 0
 
 dizionario_utenti = carica_utenti_da_sheets()
 elenco_classi = carica_classi_da_sheets()
@@ -147,7 +147,7 @@ def prepara_admin_delete(chiave):
 
 def mostra_dettagli_studente(chiave):
     st.session_state.target_studente = chiave
-    st.session_state.scroll_richiesto = True # Attiva il flag per lo scroll automatico
+    st.session_state.scroll_counter += 1 # Cambia lo stato numerico per forzare l'esecuzione JS ad ogni clic
 
 def gestisci_manutenzione(chiave, azione):
     if azione == "attiva":
@@ -210,13 +210,13 @@ else:
     utente_attivo = st.session_state.utente_attivo
 
     # Barra laterale (Sinistra)
-    st.sidebar.title("🧬 GestLab v2.5")
+    st.sidebar.title("🧬 GestLab v2.6")
     st.sidebar.write(f"Utente: **{utente_attivo}**")
     st.sidebar.write(f"Ruolo: `{ruolo}`")
     if st.sidebar.button("🚪 Esci dal sistema", use_container_width=True):
         st.session_state.autenticato = False
         st.session_state.target_studente = None
-        st.session_state.scroll_richiesto = False
+        st.session_state.scroll_counter = 0
         st.rerun()
     if st.sidebar.button("🔄 Aggiorna Dati Sheets", use_container_width=True):
         st.cache_data.clear()
@@ -228,7 +228,7 @@ else:
     with col_main:
         st.title("🖥️ Tabellone Orari Interattivo")
         if ruolo == "Studente":
-            st.write("👉 **Clicca su un'aula** per caricare e scorrere automaticamente ai dettagli completi dell'attività in fondo alla pagina.")
+            st.write("👉 **Clicca su un'aula** per scendere istantaneamente ai dettagli dell'attività in fondo alla pagina.")
         else:
             st.write("👉 Clicca su `🟢 LIBERO` per prenotare o sul tuo bottone rosso per agire sulla prenotazione.")
         st.divider()
@@ -325,44 +325,46 @@ else:
             st.write("---")
 
             # ==========================================
-            # PANNELLO STRUMENTI IN BASSO / SEZIONE DETTAGLI
+            # SEZIONE INFORMATIVA IN BASSO (CON SCROLL AUTOMATICO GARANTITO)
             # ==========================================
             
             if ruolo == "Studente":
-                # --- ANCORAGGIO HTML PER SCROLL AUTOMATICO ---
-                st.markdown("<div id='sezione_scheda_studente'></div>", unsafe_allow_html=True)
-                
+                # Elemento target HTML pulito
+                st.markdown("<div id='scheda_dettagli_studente'></div>", unsafe_allow_html=True)
                 st.write("### 🔍 Scheda Informativa Aula Selezionata")
                 
                 if st.session_state.target_studente:
                     s_data, s_lab, s_ora = st.session_state.target_studente
-                    st.toast(f"Caricati dettagli per {s_lab} ({s_ora})") # Feedback istantaneo a comparsa
                     
                     with st.container(border=True):
                         if st.session_state.target_studente in st.session_state.prenotazioni:
                             dati_p = st.session_state.prenotazioni[st.session_state.target_studente]
-                            st.markdown(f"👤 **Docente Incaricato:** `{dati_p['prof']}` *(Nome Completo)*")
-                            st.markdown(f"📝 **Descrizione Attività:** {dati_p['motivo']}")
-                            st.markdown("🚦 **Stato dell'aula:** 🔴 **Occupata regolarmente**")
+                            st.markdown(f"👤 **Docente:** {dati_p['prof']}")
+                            st.markdown(f"📝 **Attività:** {dati_p['motivo']}")
+                            st.markdown("🚦 **Stato:** 🔴 Occupata")
                         elif st.session_state.target_studente in st.session_state.manutenzioni:
-                            st.markdown("👤 **Responsabile:** `Ufficio Tecnico / Personale ATA`")
-                            st.markdown("📝 **Descrizione Attività:** Intervento urgente di manutenzione hardware/rete.")
-                            st.markdown("🚦 **Stato dell'aula:** 🔧 **NON ACCESSIBILE (GUASTO)**")
+                            st.markdown("👤 **Docente:** Ufficio Tecnico")
+                            st.markdown("📝 **Attività:** Sospensione tecnica / Manutenzione hardware")
+                            st.markdown("🚦 **Stato:** 🔧 Non disponibile per guasto")
                         else:
-                            st.markdown("👤 **Docente Incaricato:** `Nessuno`")
-                            st.markdown("📝 **Descrizione Attività:** Nessuna lezione programmata. L'aula è vuota.")
-                            st.markdown("🚦 **Stato dell'aula:** 🟢 **LIBERA**")
+                            st.markdown("👤 **Docente:** Nessuno")
+                            st.markdown("📝 **Attività:** Nessuna attività programmata")
+                            st.markdown("🚦 **Stato:** 🟢 Libera")
                     
-                    # --- INIEZIONE JAVASCRIPT PER LO SCROLL AUTOMATICO COMPORTAMENTALE ---
-                    if st.session_state.scroll_richiesto:
-                        st.components.v1.html("""
-                            <script>
-                                window.parent.document.getElementById('sezione_scheda_studente').scrollIntoView({behavior: 'smooth'});
-                            </script>
-                        """, height=0)
-                        st.session_state.scroll_richiesto = False # Resetta il trigger dello scroll
+                    # FORZATURA JS AD OGNI CLIC (Usa la chiave scroll_counter per rigenerarsi sempre)
+                    st.components.v1.html(f"""
+                        <script>
+                            setTimeout(function() {{
+                                var el = window.parent.document.getElementById('scheda_dettagli_studente');
+                                if (el) {{
+                                    el.scrollIntoView({{behavior: 'smooth', block: 'start'}});
+                                }}
+                            }}, 100);
+                        </script>
+                    """, height=0, key=f"scroll_js_{st.session_state.scroll_counter}")
+                    
                 else:
-                    st.info("💡 Fai clic su un pulsante qualsiasi del tabellone sopra: la pagina scenderà da sola e ti mostrerà il nome completo del prof e la lezione.")
+                    st.info("💡 Fai clic su un bottone qualsiasi del tabellone sopra per vederne i dettagli qui.")
                 
                 st.divider()
                 st.write("#### 🔎 Vuoi fare una ricerca rapida?")
@@ -376,6 +378,7 @@ else:
                     if not trovato:
                         st.warning("Nessuna lezione trovata con questa chiave di ricerca per oggi.")
 
+            # Modulo revoche Admin
             if ruolo == "Tecnico / Amministratore" and st.session_state.target_admin_delete:
                 st.error("### ⚠️ Modulo di Cancellazione d'Ufficio (Amministratore)")
                 t_data, t_lab, t_ora = st.session_state.target_admin_delete
@@ -405,6 +408,7 @@ else:
                             st.session_state.target_admin_delete = None
                             st.rerun()
 
+            # Modulo Professore
             if ruolo == "Professore":
                 st.write("### ⚙️ Centro Operativo")
                 tab_desc, tab_scambio, tab_storico = st.tabs(["📝 Descrizione Ore", "🔄 Proponi Scambio d'Aula", "📋 Storico Richieste Inviate"])
