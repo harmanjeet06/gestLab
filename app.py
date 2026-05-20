@@ -159,18 +159,20 @@ else:
     ruolo = st.session_state.ruolo
     utente_attivo = st.session_state.utente_attivo
 
-    # Barra laterale classica (Sinistra) solo per Info Utente e Uscita
-    st.sidebar.title("🧬 GestLab v1.8")
+    # Barra laterale classica (Sinistra)
+    st.sidebar.title("🧬 GestLab v1.9")
     st.sidebar.write(f"Utente: **{utente_attivo}**")
     st.sidebar.write(f"Ruolo: `{ruolo}`")
     if st.sidebar.button("🚪 Esci"):
         st.session_state.autenticato = False
         st.rerun()
-    if st.sidebar.button("🔄 Aggiorna DB"):
+    if st.sidebar.button("🗑️ Svuota Cache e Reset"):
         st.cache_data.clear()
+        st.session_state.scambi = []  # Pulisce i vecchi scambi corrotti
+        st.session_state.prenotazioni = {}
         st.rerun()
 
-    # LAYOUT PRINCIPALE STRUTTURATO A DUE COLONNE (Tabellone a sinistra, Notifiche a destra)
+    # LAYOUT STRUTTURATO (Tabellone a sinistra, Notifiche a destra)
     col_main, col_notifiche_destra = st.columns([3, 1])
 
     with col_main:
@@ -248,7 +250,7 @@ else:
                                 st.button("🟢 LIBERO \n[Blocca Aula]", key=f"btn_{chiave}", type="primary", use_container_width=True, on_click=gestisci_manutenzione, args=(chiave, "attiva"))
                             else:
                                 st.button("🟢 LIBERO", key=f"btn_{chiave}", type="primary", use_container_width=True, disabled=True)
-                st.write("---")
+            st.write("---")
 
             # ==========================================
             # PANNELLO STRUMENTI IN BASSO
@@ -281,7 +283,6 @@ else:
                             col_scambio1, col_scambio2 = st.columns(2)
                             with col_scambio1:
                                 if st.button("Invia Proposta di Scambio", type="primary"):
-                                    # [RISOLTO BUG KEYERROR]: Aggiunto il campo "data" all'interno del dizionario scambi
                                     st.session_state.scambi.append({
                                         "da": utente_attivo,
                                         "a": collega_proprietario,
@@ -309,8 +310,10 @@ else:
                     if not mie_richieste:
                         st.write("*Non hai inviato nessuna richiesta.*")
                     for r in mie_richieste:
-                        colore_stato = "🟡" if "In attesa" in r["stato"] else ("🟢" if "Accettato" in r["stato"] else "🔴")
-                        st.write(f"{colore_stato} Per **{r['lab']}** ({r['ora']}) del {r['data'].strftime('%d/%m')} inviata a **{r['a']}** $\rightarrow$ Stato: **{r['stato']}**")
+                        colore_stato = "🟡" if "In attesa" in r.get("stato", "In attesa") else ("🟢" if "Accettato" in r.get("stato", "") else "🔴")
+                        # [RISOLTO CON GET E DEFAULT]: Gestisce in sicurezza sia i nuovi record che quelli vecchi
+                        data_stringa = r["data"].strftime('%d/%m') if "data" in r and r["data"] else datetime.date.today().strftime('%d/%m')
+                        st.write(f"{colore_stato} Per **{r.get('lab', 'N/D')}** ({r.get('ora', 'N/D')}) del {data_stringa} inviata a **{r.get('a', 'Collega')}** $\rightarrow$ Stato: **{r.get('stato', 'In attesa')}**")
 
             elif ruolo == "Studente":
                 st.write("### 🔍 Cerca la tua lezione")
@@ -329,25 +332,30 @@ else:
         st.divider()
         
         if ruolo == "Professore":
-            richieste_ricevute = [idx for idx, s in enumerate(st.session_state.scambi) if s["a"] == utente_attivo and s["stato"] == "In attesa"]
+            richieste_ricevute = [idx for idx, s in enumerate(st.session_state.scambi) if s.get("a") == utente_attivo and s.get("stato") == "In attesa"]
             
             if not richieste_ricevute:
                 st.info("🟢 Nessuna richiesta in sospeso.")
             else:
                 for idx in richieste_ricevute:
                     req = st.session_state.scambi[idx]
-                    with st.expander(f"📥 Da: {req['da']}", expanded=True):
-                        st.write(f"**Aula:** {req['lab']}")
-                        st.write(f"**Ora:** {req['ora']}")
-                        st.write(f"**Giorno:** {req['data'].strftime('%d/%m/%Y')}")
-                        st.write(f"*Messaggio:* {req['nota']}")
+                    with st.expander(f"📥 Da: {req.get('da', 'Collega')}", expanded=True):
+                        st.write(f"**Aula:** {req.get('lab', 'N/D')}")
+                        st.write(f"**Ora:** {req.get('ora', 'N/D')}")
+                        
+                        if "data" in req and req["data"]:
+                            st.write(f"**Giorno:** {req['data'].strftime('%d/%m/%Y')}")
+                        
+                        st.write(f"*Messaggio:* {req.get('nota', '')}")
                         st.write("---")
                         
                         # Tasto per Accettare lo scambio
                         if st.button("✅ Accetta", key=f"acc_{idx}", use_container_width=True):
-                            chiave_target = (req['data'], req['lab'], req['ora'])
-                            # Scambio effettivo sul tabellone
-                            st.session_state.prenotazioni[chiave_target] = {"prof": req['da'], "motivo": "Scambio Concesso"}
+                            # Salva in sicurezza prendendo la data corrente se manca
+                            r_data = req.get('data', datetime.date.today())
+                            chiave_target = (r_data, req.get('lab'), req.get('ora'))
+                            
+                            st.session_state.prenotazioni[chiave_target] = {"prof": req.get('da'), "motivo": "Scambio Concesso"}
                             st.session_state.scambi[idx]["stato"] = "Accettato"
                             st.toast("Scambio approvato!")
                             st.rerun()
@@ -359,7 +367,7 @@ else:
                                 st.error("Inserisci una motivazione prima di rifiutare!")
                             else:
                                 st.session_state.scambi[idx]["stato"] = f"Rifiutato: {motivo_rifiuto}"
-                                st.toast("Scambio rifiutato con motivazione.")
+                                st.toast("Scambio rifiutato.")
                                 st.rerun()
         else:
             st.caption("Le notifiche di scambio sono disponibili solo per gli account Docente.")
