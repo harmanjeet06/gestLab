@@ -159,7 +159,10 @@ else:
     ruolo = st.session_state.ruolo
     utente_attivo = st.session_state.utente_attivo
 
-    st.sidebar.title("🧬 GestLab v1.6")
+    # --------------------------------------------------
+    # SIDEBAR: DATI UTENTE E NUOVO CENTRO NOTIFICHE
+    # --------------------------------------------------
+    st.sidebar.title("🧬 GestLab v1.7")
     st.sidebar.write(f"Utente: **{utente_attivo}**")
     st.sidebar.write(f"Ruolo: `{ruolo}`")
     
@@ -170,6 +173,44 @@ else:
         st.cache_data.clear()
         st.rerun()
 
+    st.sidebar.divider()
+    
+    # CENTRO NOTIFICHE SCAMBI NELLA SIDEBAR
+    if ruolo == "Professore":
+        st.sidebar.subheader("🔔 Richieste di Scambio")
+        richieste_ricevute = [idx for idx, s in enumerate(st.session_state.scambi) if s["a"] == utente_attivo and s["stato"] == "In attesa"]
+        
+        if not richieste_ricevute:
+            st.sidebar.caption("🟢 Nessuna nuova notifica.")
+        else:
+            for idx in richieste_ricevute:
+                req = st.session_state.scambi[idx]
+                with st.sidebar.expander(f"📥 Da: {req['da']} ({req['lab']})", expanded=True):
+                    st.write(f"Ti chiede l'aula alla **{req['ora']}**.")
+                    st.write(f"*Nota:* {req['nota']}")
+                    
+                    # Tasto per Accettare lo scambio
+                    if st.button("✅ Accetta", key=f"acc_{idx}"):
+                        chiave_target = (req['data'], req['lab'], req['ora'])
+                        # Scambio effettivo sul tabellone: assegna l'ora al richiedente
+                        st.session_state.prenotazioni[chiave_target] = {"prof": req['da'], "motivo": "Scambio Concesso"}
+                        st.session_state.scambi[idx]["stato"] = "Accettato"
+                        st.toast("Scambio approvato!")
+                        st.rerun()
+                    
+                    # Modulo per Rifiutare con Motivazione
+                    motivo_rifiuto = st.text_input("Motivo del rifiuto:", key=f"mot_{idx}", placeholder="Es: Ho una verifica...")
+                    if st.button("❌ Rifiuta", key=f"rif_{idx}"):
+                        if motivo_rifiuto.strip() == "":
+                            st.sidebar.error("Inserisci una motivazione!")
+                        else:
+                            st.session_state.scambi[idx]["stato"] = f"Rifiutato: {motivo_rifiuto}"
+                            st.toast("Scambio rifiutato.")
+                            st.rerun()
+
+    # --------------------------------------------------
+    # CONTENUTO PRINCIPALE: TABELLONE
+    # --------------------------------------------------
     st.title("🖥️ Tabellone Orari Interattivo")
     st.write("👉 Clicca su `🟢 LIBERO` per prenotare o sul tuo bottone rosso per cancellare. Clicca sul tasto rosso di un **collega** per proporgli uno scambio.")
     st.divider()
@@ -220,7 +261,6 @@ else:
                         motivo_pren = st.session_state.prenotazioni[chiave]['motivo']
                         
                         if proprietario == utente_attivo:
-                            # Se clicco sul MIO: si cancella
                             st.button(
                                 f"📋 Tuo: {motivo_pren[:10]} \n[CANCELLA]", 
                                 key=f"btn_{chiave}", 
@@ -230,7 +270,6 @@ else:
                                 args=(chiave,)
                             )
                         else:
-                            # Se clicco su quello di un ALTRO: attiva la modalità scambio in basso
                             st.button(
                                 f"🔴 {proprietario[:10]} \n({motivo_pren[:10]})", 
                                 key=f"btn_{chiave}", 
@@ -240,7 +279,6 @@ else:
                                 args=(chiave,)
                             )
                     else:
-                        # Se è LIBERO
                         if ruolo == "Professore":
                             st.button("🟢 LIBERO \n[Prenota]", key=f"btn_{chiave}", type="primary", use_container_width=True, on_click=esegui_prenotazione, args=(chiave, utente_attivo))
                         elif ruolo == "Tecnico / Amministratore":
@@ -250,12 +288,12 @@ else:
             st.write("---")
 
         # ==========================================
-        # ZONA OPERATIVA & SCAMBI
+        # PANNELLO STRUMENTI IN BASSO
         # ==========================================
         if ruolo == "Professore":
-            st.write("### ⚙️ Centro Operativo e Richiesta Scambi")
+            st.write("### ⚙️ Gestione Lezioni e Storico Scambi")
             
-            tab_desc, tab_scambio, tab_notifiche = st.tabs(["📝 Descrizione Ore", "🔄 Proponi Scambio d'Aula", "🔔 Registro Richieste Inviate"])
+            tab_desc, tab_scambio, tab_notifiche = st.tabs(["📝 Descrizione Ore", "🔄 Proponi Scambio d'Aula", "📋 Storico Richieste Inviate"])
             
             with tab_desc:
                 mie_p = [k for k, v in st.session_state.prenotazioni.items() if v["prof"] == utente_attivo and k[0] == data_selezionata]
@@ -263,21 +301,20 @@ else:
                     scelta_p = st.selectbox("Personalizza la descrizione di una tua ora di oggi:", mie_p, format_func=lambda x: f"{x[1]} alla {x[2]}")
                     nuovo_motivo = st.text_input("Classe e Materia:", value=st.session_state.prenotazioni[scelta_p]["motivo"])
                     if st.button("Aggiorna sul Tabellone"):
-                        st.session_state.prenotazioni[scelta_p]["motivo"] = nuevo_motivo
+                        st.session_state.prenotazioni[scelta_p]["motivo"] = nuovo_motivo
                         st.success("Tabellone aggiornato!")
                         st.rerun()
                 else:
                     st.info("💡 Non hai ancora ore prenotate oggi sul tabellone.")
 
             with tab_scambio:
-                # Se l'utente ha cliccato sul tasto rosso di un collega, i dati si pre-compilano da soli!
                 if st.session_state.target_scambio:
                     t_data, t_lab, t_ora = st.session_state.target_scambio
                     if st.session_state.target_scambio in st.session_state.prenotazioni:
                         collega_proprietario = st.session_state.prenotazioni[st.session_state.target_scambio]["prof"]
                         
-                        st.warning(f"Hai selezionato lo slot: **{t_lab}** alla **{t_ora}** di **{collega_proprietario}**")
-                        nota_scambio = st.text_area("Scrivi una nota per il collega (Es: 'Ho urgenza di fare una verifica hardware'):")
+                        st.warning(f"Stai chiedendo lo scambio per lo slot: **{t_lab}** alla **{t_ora}** di **{collega_proprietario}**")
+                        nota_scambio = st.text_area("Scrivi un messaggio per il collega:")
                         
                         col_scambio1, col_scambio2 = st.columns(2)
                         with col_scambio1:
@@ -285,38 +322,32 @@ else:
                                 st.session_state.scambi.append({
                                     "da": utente_attivo,
                                     "a": collega_proprietario,
+                                    "data": t_data,
                                     "lab": t_lab,
                                     "ora": t_ora,
                                     "nota": nota_scambio,
                                     "stato": "In attesa"
                                 })
-                                st.success(f"Richiesta inoltrata a {collega_proprietario}!")
+                                st.success(f"Richiesta inviata! Il collega la vedrà nella sua barra laterale.")
                                 st.session_state.target_scambio = None
                                 st.rerun()
                         with col_scambio2:
-                            if st.button("Annulla operazione"):
+                            if st.button("Annulla"):
                                 st.session_state.target_scambio = None
                                 st.rerun()
                     else:
                         st.session_state.target_scambio = None
                 else:
-                    st.info("👉 Per inviare una proposta di scambio, ti basta scorrere in alto il tabellone e fare clic sul pulsante rosso del collega con cui vuoi scambiare l'aula.")
+                    st.info("👉 Fai clic sul pulsante rosso di un collega sul tabellone in alto per compilare questo modulo di scambio automaticamente.")
 
             with tab_notifiche:
                 mie_richieste = [s for s in st.session_state.scambi if s["da"] == utente_attivo]
-                richieste_ricevute = [s for s in st.session_state.scambi if s["a"] == utente_attivo]
-                
-                st.write("#### 📥 Richieste Ricevute da altri colleghi")
-                if not richieste_ricevute:
-                    st.write("*Nessuna richiesta ricevuta.*")
-                for r in richieste_ricevute:
-                    st.info(f"**{r['da']}** ti chiede il laboratorio **{r['lab']}** alla **{r['ora']}**.\n\n*Messaggio:* {r['nota']}")
-                
-                st.write("#### 📤 Le tue proposte inviate")
+                st.write("#### 📤 Stato delle richieste che hai inviato ai colleghi")
                 if not mie_richieste:
-                    st.write("*Non hai richieste in corso.*")
+                    st.write("*Non hai inviato nessuna richiesta.*")
                 for r in mie_richieste:
-                    st.write(f"• Inviata a **{r['a']}** per {r['lab']} ({r['ora']}) -> Stato: `{r['stato']}`")
+                    colore_stato = "🟡" if "In attesa" in r["stato"] else ("🟢" if "Accettato" in r["stato"] else "🔴")
+                    st.write(f"{colore_stato} Per **{r['lab']}** ({r['ora']}) inviata a **{r['a']}** $\rightarrow$ Stato: **{r['stato']}**")
 
         elif ruolo == "Studente":
             st.write("### 🔍 Cerca la tua lezione")
