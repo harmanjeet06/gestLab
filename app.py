@@ -65,9 +65,11 @@ if "utente_attivo" not in st.session_state: st.session_state.utente_attivo = Non
 if "prenotazioni" not in st.session_state: st.session_state.prenotazioni = {}
 if "manutenzioni" not in st.session_state: st.session_state.manutenzioni = {}
 if "scambi" not in st.session_state: st.session_state.scambi = []
+if "notifiche_sistema" not in st.session_state: st.session_state.notifiche_sistema = []
 
-# Supporto per mirare lo scambio cliccando sul tabellone
+# Supporto per mirare lo scambio o la cancellazione admin
 if "target_scambio" not in st.session_state: st.session_state.target_scambio = None
+if "target_admin_delete" not in st.session_state: st.session_state.target_admin_delete = None
 
 dizionario_utenti = carica_utenti_da_sheets()
 elenco_classi = carica_classi_da_sheets()
@@ -99,16 +101,32 @@ def get_orari_per_giorno(giorno):
 # --- FUNZIONI DI CALLBACK ---
 def esegui_prenotazione(chiave, prof):
     st.session_state.prenotazioni[chiave] = {"prof": prof, "motivo": "Lezione Didattica"}
+    # Notifica di conferma prenotazione
+    st.session_state.notifiche_sistema.append({
+        "destinatario": prof,
+        "tipo": "Conferma",
+        "messaggio": f"Hai prenotato con successo il laboratorio **{chiave[1]}** per la **{chiave[2]}** del {chiave[0].strftime('%d/%m')}."
+    })
 
 def cancella_prenotazione(chiave):
     if chiave in st.session_state.prenotazioni:
+        prof = st.session_state.prenotazioni[chiave]["prof"]
         del st.session_state.prenotazioni[chiave]
+        # Notifica di avvenuta cancellazione
+        st.session_state.notifiche_sistema.append({
+            "destinatario": prof,
+            "tipo": "Cancellazione",
+            "messaggio": f"Hai cancellato la tua prenotazione per **{chiave[1]}** ({chiave[2]}) del {chiave[0].strftime('%d/%m')}."
+        })
 
 def prepara_scambio(chiave):
     st.session_state.target_scambio = chiave
 
+def prepara_admin_delete(chiave):
+    st.session_state.target_admin_delete = chiave
+
 def gestisci_manutenzione(chiave, azione):
-    if action == "attiva":
+    if azione == "attiva":
         if chiave in st.session_state.prenotazioni:
             del st.session_state.prenotazioni[chiave]
         st.session_state.manutenzioni[chiave] = "Sospensione Tecnica"
@@ -159,8 +177,8 @@ else:
     ruolo = st.session_state.ruolo
     utente_attivo = st.session_state.utente_attivo
 
-    # Barra laterale classica (Sinistra) - UX Pulita: Solo Logout e Aggiorna DB sicuro
-    st.sidebar.title("🧬 GestLab v2.0")
+    # Barra laterale (Sinistra)
+    st.sidebar.title("🧬 GestLab v2.1")
     st.sidebar.write(f"Utente: **{utente_attivo}**")
     st.sidebar.write(f"Ruolo: `{ruolo}`")
     if st.sidebar.button("🚪 Esci dal sistema", use_container_width=True):
@@ -175,7 +193,7 @@ else:
 
     with col_main:
         st.title("🖥️ Tabellone Orari Interattivo")
-        st.write("👉 Clicca su `🟢 LIBERO` per prenotare o sul tuo bottone rosso per cancellare. Clicca sul tasto rosso di un **collega** per proporgli uno scambio.")
+        st.write("👉 Clicca su `🟢 LIBERO` per prenotare o sul tuo bottone rosso per agire sulla prenotazione.")
         st.divider()
 
         data_selezionata = st.date_input("Seleziona Data:", datetime.date.today())
@@ -223,7 +241,17 @@ else:
                             proprietario = st.session_state.prenotazioni[chiave]['prof']
                             motivo_pren = st.session_state.prenotazioni[chiave]['motivo']
                             
-                            if proprietario == utente_attivo:
+                            if ruolo == "Tecnico / Amministratore":
+                                # L'ADMIN PUÒ ANNULLARE QUALSIASI PRENOTAZIONE
+                                st.button(
+                                    f"💥 {proprietario[:10]} \n[REVOCA ADMIN]", 
+                                    key=f"btn_{chiave}", 
+                                    type="secondary", 
+                                    use_container_width=True,
+                                    on_click=prepara_admin_delete,
+                                    args=(chiave,)
+                                )
+                            elif proprietario == utente_attivo:
                                 st.button(
                                     f"📋 Tuo: {motivo_pren[:10]} \n[CANCELLA]", 
                                     key=f"btn_{chiave}", 
@@ -253,6 +281,38 @@ else:
             # ==========================================
             # PANNELLO STRUMENTI IN BASSO
             # ==========================================
+            if ruolo == "Tecnico / Amministratore" and st.session_state.target_admin_delete:
+                # SEZIONE ADMIN PER LA CANCELLAZIONE FORMALE E AVVISO AL PROF
+                st.error("### ⚠️ Modulo di Cancellazione d'Ufficio (Amministratore)")
+                t_data, t_lab, t_ora = st.session_state.target_admin_delete
+                if st.session_state.target_admin_delete in st.session_state.prenotazioni:
+                    prof_colpito = st.session_state.prenotazioni[st.session_state.target_admin_delete]["prof"]
+                    st.write(f"Stai rimuovendo la prenotazione di: **{prof_colpito}** del {t_data.strftime('%d/%m')} ({t_ora} in {t_lab}).")
+                    
+                    nota_admin = st.text_input("Inserisci la motivazione ufficiale da inviare al docente:", placeholder="Es: Spostamento manutenzione urgente dell'hardware...")
+                    
+                    c_adm1, c_adm2 = st.columns(2)
+                    with c_adm1:
+                        if st.button("Conferma Cancellazione e Invia Avviso", type="primary", use_container_width=True):
+                            if nota_admin.strip() == "":
+                                st.error("Devi specificare una motivazione per avvisare il professore!")
+                            else:
+                                # Invio Notifica al Prof interessato
+                                st.session_state.notifiche_sistema.append({
+                                    "destinatario": prof_colpito,
+                                    "tipo": "🚨 REVOCA ADMIN",
+                                    "messaggio": f"La tua prenotazione in data {t_data.strftime('%d/%m')} alla {t_ora} nel laboratorio {t_lab} è stata **cancellata dal Personale Tecnico**. \n\n*Motivazione:* {nota_admin}"
+                                })
+                                # Rimozoine della prenotazione
+                                del st.session_state.prenotazioni[st.session_state.target_admin_delete]
+                                st.success("Prenotazione rimossa e professore avvisato nel suo pannello.")
+                                st.session_state.target_admin_delete = None
+                                st.rerun()
+                    with c_adm2:
+                        if st.button("Annulla Procedura", use_container_width=True):
+                            st.session_state.target_admin_delete = None
+                            st.rerun()
+
             if ruolo == "Professore":
                 st.write("### ⚙️ Centro Operativo")
                 tab_desc, tab_scambio, tab_storico = st.tabs(["📝 Descrizione Ore", "🔄 Proponi Scambio d'Aula", "📋 Storico Richieste Inviate"])
@@ -308,14 +368,11 @@ else:
                     if not mie_richieste:
                         st.write("*Non hai inviato nessuna richiesta.*")
                     for r in mie_richieste:
-                        # PROTEZIONE DA DATI CORROTTI SULLO STORICO INVIATO
                         stato_pulito = r.get("stato", "In attesa")
                         colore_stato = "🟡" if "In attesa" in stato_pulito else ("🟢" if "Accettato" in stato_pulito else "🔴")
                         
-                        # Se la data è assente nei log vecchi, usa la data odierna per non crashare
                         reg_data = r["data"] if "data" in r and r["data"] else datetime.date.today()
                         data_stringa = reg_data.strftime('%d/%m') if hasattr(reg_data, 'strftime') else str(reg_data)
-                        
                         st.write(f"{colore_stato} Per **{r.get('lab', 'N/D')}** ({r.get('ora', 'N/D')}) del {data_stringa} inviata a **{r.get('a', 'Collega')}** $\rightarrow$ Stato: **{stato_pulito}**")
 
             elif ruolo == "Studente":
@@ -327,55 +384,82 @@ else:
                             st.write(f"📖 **{k[1]}** | Ora: **{k[2]}** -> Docente: {v['prof']} ({v['motivo']})")
 
     # --------------------------------------------------
-    # COLONNA DI DESTRA: CENTRO NOTIFICHE INTERATTIVO
+    # COLONNA DI DESTRA: CENTRO NOTIFICHE INTERATTIVO & AVVISI
     # --------------------------------------------------
     with col_notifiche_destra:
-        st.write("### 🔔 Centro Notifiche")
-        st.write("Gestisci qui le richieste dei colleghi.")
-        st.divider()
+        st.write("### 🔔 bacheca Notifiche")
         
+        # 1. SEZIONE LOG COMPLETO DI CONFERME / CANCELLAZIONI / AZIONI ADMIN
+        if ruolo == "Professore" or ruolo == "Tecnico / Amministratore":
+            mie_notifiche_scuola = [n for n in st.session_state.notifiche_sistema if n["destinatario"] == utente_attivo]
+            if mie_notifiche_scuola:
+                st.write("##### 📢 Avvisi di Sistema")
+                for n in reversed(mie_notifiche_scuola):  # Mostra le più recenti in alto
+                    if "🚨" in n["tipo"]:
+                        st.error(f"**{n['tipo']}**\n\n{n['messaggio']}")
+                    elif "Cancellazione" in n["tipo"]:
+                        st.warning(f"**{n['tipo']}**\n\n{n['messaggio']}")
+                    else:
+                        st.success(f"**{n['tipo']}**\n\n{n['messaggio']}")
+                if st.button("🗑️ Pulisci bacheca avvisi", use_container_width=True):
+                    st.session_state.notifiche_sistema = [n for n in st.session_state.notifiche_sistema if n["destinatario"] != utente_attivo]
+                    st.rerun()
+                st.divider()
+
+        # 2. GESTIONE DIRETTA DELLE RICHIESTE DI SCAMBIO RICEVUTE
         if ruolo == "Professore":
-            # PROTEZIONE DA DATI CORROTTI SUL FILTRO RICEVUTI
+            st.write("##### 🔄 Richieste di Scambio")
             richieste_ricevute = [
                 idx for idx, s in enumerate(st.session_state.scambi) 
                 if isinstance(s, dict) and s.get("a") == utente_attivo and "In attesa" in s.get("stato", "In attesa")
             ]
             
             if not richieste_ricevute:
-                st.info("🟢 Nessuna richiesta in sospeso.")
+                st.info("Nessuna richiesta di scambio in sospeso.")
             else:
                 for idx in richieste_ricevute:
                     req = st.session_state.scambi[idx]
                     with st.expander(f"📥 Da: {req.get('da', 'Collega')}", expanded=True):
                         st.write(f"**Aula:** {req.get('lab', 'N/D')}")
                         st.write(f"**Ora:** {req.get('ora', 'N/D')}")
-                        
-                        # Controllo di sicurezza sulla data
                         r_data = req.get('data', datetime.date.today())
                         if hasattr(r_data, 'strftime'):
                             st.write(f"**Giorno:** {r_data.strftime('%d/%m/%Y')}")
-                        
                         st.write(f"*Messaggio:* {req.get('nota', '')}")
                         st.write("---")
                         
-                        # Tasto per Accettare lo scambio
-                        if st.button("✅ Accetta", key=f"acc_{idx}", use_container_width=True):
-                            # Ricostruisce la chiave target in piena sicurezza
+                        # ACCETTA -> Genera avviso per il richiedente
+                        if st.button("✅ Accetta Scambio", key=f"acc_{idx}", use_container_width=True):
                             chiave_target = (r_data, req.get('lab'), req.get('ora'))
                             
+                            # Esegue lo scambio sul tabellone
                             st.session_state.prenotazioni[chiave_target] = {"prof": req.get('da'), "motivo": "Scambio Concesso"}
                             st.session_state.scambi[idx]["stato"] = "Accettato"
+                            
+                            # Notifica automatica di accettazione al mittente
+                            st.session_state.notifiche_sistema.append({
+                                "destinatario": req.get('da'),
+                                "tipo": "🟢 Scambio Accettato",
+                                "messaggio": f"Il collega **{utente_attivo}** ha accettato lo scambio per il laboratorio **{req.get('lab')}** alla **{req.get('ora')}** del {r_data.strftime('%d/%m')}!"
+                            })
                             st.toast("Scambio approvato!")
                             st.rerun()
                         
-                        # Sezione Rifiuto con Motivazione
-                        motivo_rifiuto = st.text_input("Motivo del rifiuto:", key=f"mot_{idx}", placeholder="Es: Devo fare una verifica...")
-                        if st.button("❌ Rifiuta", key=f"rif_{idx}", use_container_width=True):
+                        # RIFIUTA -> Chiede motivazione obbligatoria e genera avviso per il richiedente
+                        motivo_rifiuto = st.text_input("Motivo del rifiuto:", key=f"mot_{idx}", placeholder="Es: Ho una verifica...")
+                        if st.button("❌ Rifiuta Scambio", key=f"rif_{idx}", use_container_width=True):
                             if motivo_rifiuto.strip() == "":
                                 st.error("Inserisci una motivazione prima di rifiutare!")
                             else:
                                 st.session_state.scambi[idx]["stato"] = f"Rifiutato: {motivo_rifiuto}"
+                                
+                                # Notifica automatica di rifiuto al mittente con motivazione
+                                st.session_state.notifiche_sistema.append({
+                                    "destinatario": req.get('da'),
+                                    "tipo": "🔴 Scambio Rifiutato",
+                                    "messaggio": f"Il collega **{utente_attivo}** ha rifiutato la tua richiesta di scambio per {req.get('lab')} ({req.get('ora')}). \n\n*Motivazione:* {motivo_rifiuto}"
+                                })
                                 st.toast("Scambio rifiutato.")
                                 st.rerun()
         else:
-            st.caption("Le notifiche di scambio sono disponibili solo per gli account Docente.")
+            st.caption("Accedi come Docente per scambiare ore o come Admin per revocarle.")
