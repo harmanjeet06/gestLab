@@ -6,13 +6,12 @@ import pandas as pd
 st.set_page_config(page_title="GestLab Cloud Secure", layout="wide", initial_sidebar_state="expanded")
 
 # --- CONNESSIONE A GOOGLE SHEETS (VIA URL CSV PUBBLICO) ---
-# ID inserito con successo!
 GOOGLE_SHEET_ID = "1T83Ofmcesg_YoYbKkLHM1LFaw0c72AHwo9QTPyIb0kM"
 
 URL_UTENTI = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=utenti"
 URL_STUDENTI = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=studenti"
 
-@st.cache_data(ttl=60)  # Mantiene i dati in memoria per 60 secondi per evitare continui sovraccarichi di richieste a Google
+@st.cache_data(ttl=60)  # Mantiene i dati in cache per 60 secondi per non sovraccaricare Google Sheets
 def carica_utenti_da_sheets():
     try:
         df = pd.read_csv(URL_UTENTI)
@@ -77,7 +76,7 @@ def get_orari_per_giorno(giorno):
             {"ora": "1ª ora", "inizio": "08:00", "fine": "09:00", "prenotabile": True},
             {"ora": "2ª ora", "inizio": "09:00", "fine": "10:00", "prenotabile": True},
             {"ora": "3ª ora", "inizio": "10:00", "fine": "10:55", "prenotabile": True},
-            {"ora": "Intervallo", "inizio": "10:55", "fine": "11:10", "prenotabile": False},
+            {"ora": "Intervallo", "looking": "10:55", "fine": "11:10", "prenotabile": False},
             {"ora": "4ª ora", "inizio": "11:10", "fine": "12:10", "prenotabile": True},
             {"ora": "5ª ora", "inizio": "12:10", "fine": "13:10", "prenotabile": True},
         ]
@@ -99,14 +98,25 @@ if not st.session_state.autenticato:
             
             if pulsante_login:
                 user_clean = username_input.strip()
-                if user_clean in dizionario_utenti and dizionario_utenti[user_clean]["password"] == password_input.strip():
+                pass_clean = password_input.strip()
+                
+                # --- CONTROLLO HARDCODED DI SICUREZZA PER L'ADMIN SUPREMO ---
+                if user_clean == "admin" and pass_clean == "admin":
+                    st.session_state.autenticato = True
+                    st.session_state.ruolo = "Tecnico / Amministratore"
+                    st.session_state.utente_attivo = "Admin Supremo"
+                    st.success("Accesso Amministratore locale sbloccato!")
+                    st.rerun()
+                
+                # --- CONTROLLO STANDARD SUL DATABASE REMOTO GOOGLE SHEETS ---
+                elif user_clean in dizionario_utenti and dizionario_utenti[user_clean]["password"] == pass_clean:
                     st.session_state.autenticato = True
                     st.session_state.ruolo = dizionario_utenti[user_clean]["ruolo"]
                     st.session_state.utente_attivo = dizionario_utenti[user_clean]["nominativo"]
                     st.success("Autenticato con successo!")
                     st.rerun()
                 else:
-                    st.error("Credenziali non corrette. Verifica i dati sul Foglio Google.")
+                    st.error("Credenziali non corrette. Verifica i dati o contatta l'amministratore.")
                     
     else:  # Studente
         with st.form("form_studente"):
