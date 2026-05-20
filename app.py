@@ -1,6 +1,8 @@
 import streamlit as st
 import datetime
 import pandas as pd
+import os
+import json
 
 # --- CONFIGURAZIONE PAGINA ---
 st.set_page_config(page_title="GestLab Cloud Secure", layout="wide", initial_sidebar_state="expanded")
@@ -28,6 +30,37 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
+
+# --- UTILITY: SALVATAGGIO PERSISTENTE SU FILE DEL SERVER ---
+# Salviamo le prenotazioni in un file locale per evitare che il refresh della pagina (F5) le cancelli.
+FILE_PRENOTAZIONI = "database_prenotazioni.json"
+
+def salva_prenotazioni_su_disco():
+    # Convertiamo le chiavi tuple (Data, Lab, Ora) in stringhe leggibili per il JSON
+    dati_serializzabili = {}
+    for chiave, info in st.session_state.prenotazioni.items():
+        chiave_str = f"{chiave[0].isoformat()}||{chiave[1]}||{chiave[2]}"
+        dati_serializzabili[chiave_str] = info
+    
+    with open(FILE_PRENOTAZIONI, "w", encoding="utf-8") as f:
+        json.dump(dati_serializzabili, f, ensure_ascii=False, indent=4)
+
+def carica_prenotazioni_da_disco():
+    if os.path.exists(FILE_PRENOTAZIONI):
+        try:
+            with open(FILE_PRENOTAZIONI, "r", encoding="utf-8") as f:
+                dati_serializzati = json.load(f)
+            
+            prenotazioni_ripristinate = {}
+            for chiave_str, info in dati_serializzati.items():
+                parti = chiave_str.split("||")
+                data_obj = datetime.date.fromisoformat(parti[0])
+                chiave_tuple = (data_obj, parti[1], parti[2])
+                prenotazioni_ripristinate[chiave_tuple] = info
+            return prenotazioni_ripristinate
+        except:
+            return {}
+    return {}
 
 # --- CONNESSIONE A GOOGLE SHEETS ---
 GOOGLE_SHEET_ID = "1T83Ofmcesg_YoYbKkLHM1LFaw0c72AHwo9QTPyIb0kM"
@@ -62,7 +95,10 @@ if "autenticato" not in st.session_state: st.session_state.autenticato = False
 if "ruolo" not in st.session_state: st.session_state.ruolo = None
 if "utente_attivo" not in st.session_state: st.session_state.utente_attivo = None
 
-if "prenotazioni" not in st.session_state: st.session_state.prenotazioni = {}
+# Caricamento sicuro iniziale delle prenotazioni salvate
+if "prenotazioni" not in st.session_state: 
+    st.session_state.prenotazioni = carica_prenotazioni_da_disco()
+
 if "manutenzioni" not in st.session_state: st.session_state.manutenzioni = {}
 if "scambi" not in st.session_state: st.session_state.scambi = []
 if "notifiche_sistema" not in st.session_state: st.session_state.notifiche_sistema = []
@@ -71,7 +107,6 @@ if "notifiche_sistema" not in st.session_state: st.session_state.notifiche_siste
 if "target_scambio" not in st.session_state: st.session_state.target_scambio = None
 if "target_admin_delete" not in st.session_state: st.session_state.target_admin_delete = None
 if "target_studente" not in st.session_state: st.session_state.target_studente = None
-if "scroll_richiesto" not in st.session_state: st.session_state.scroll_richiesto = False
 
 dizionario_utenti = carica_utenti_da_sheets()
 elenco_classi = carica_classi_da_sheets()
@@ -103,6 +138,7 @@ def get_orari_per_giorno(giorno):
 # --- FUNZIONI DI CALLBACK ---
 def esegui_prenotazione(chiave, prof):
     st.session_state.prenotazioni[chiave] = {"prof": prof, "motivo": "Lezione Didattica"}
+    salva_prenotazioni_su_disco() # Salva su file immediatamente
     
     st.session_state.notifiche_sistema.append({
         "destinatario": prof,
@@ -123,6 +159,7 @@ def cancella_prenotazione(chiave):
     if chiave in st.session_state.prenotazioni:
         prof = st.session_state.prenotazioni[chiave]["prof"]
         del st.session_state.prenotazioni[chiave]
+        salva_prenotazioni_su_disco() # Salva su file immediatamente
         
         st.session_state.notifiche_sistema.append({
             "destinatario": prof,
@@ -147,13 +184,13 @@ def prepara_admin_delete(chiave):
 
 def mostra_dettagli_studente(chiave):
     st.session_state.target_studente = chiave
-    st.session_state.scroll_richiesto = True # Attiva il flag per lo scroll automatico
 
 def gestisci_manutenzione(chiave, azione):
     if azione == "attiva":
         if chiave in st.session_state.prenotazioni:
             prof_colpito = st.session_state.prenotazioni[chiave]["prof"]
             del st.session_state.prenotazioni[chiave]
+            salva_prenotazioni_su_disco()
             
             st.session_state.notifiche_sistema.append({
                 "destinatario": prof_colpito,
@@ -210,13 +247,12 @@ else:
     utente_attivo = st.session_state.utente_attivo
 
     # Barra laterale (Sinistra)
-    st.sidebar.title("🧬 GestLab v2.5")
+    st.sidebar.title("🧬 GestLab v2.8")
     st.sidebar.write(f"Utente: **{utente_attivo}**")
     st.sidebar.write(f"Ruolo: `{ruolo}`")
     if st.sidebar.button("🚪 Esci dal sistema", use_container_width=True):
         st.session_state.autenticato = False
         st.session_state.target_studente = None
-        st.session_state.scroll_richiesto = False
         st.rerun()
     if st.sidebar.button("🔄 Aggiorna Dati Sheets", use_container_width=True):
         st.cache_data.clear()
@@ -228,7 +264,7 @@ else:
     with col_main:
         st.title("🖥️ Tabellone Orari Interattivo")
         if ruolo == "Studente":
-            st.write("👉 **Clicca su un'aula** per caricare e scorrere automaticamente ai dettagli completi dell'attività in fondo alla pagina.")
+            st.write("👉 **Clicca su un'aula** per caricarne i dettagli completi dell'attività in fondo alla pagina.")
         else:
             st.write("👉 Clicca su `🟢 LIBERO` per prenotare o sul tuo bottone rosso per agire sulla prenotazione.")
         st.divider()
@@ -325,44 +361,31 @@ else:
             st.write("---")
 
             # ==========================================
-            # PANNELLO STRUMENTI IN BASSO / SEZIONE DETTAGLI
+            # SEZIONE INFORMATIVA IN BASSO NATURALE
             # ==========================================
-            
             if ruolo == "Studente":
-                # --- ANCORAGGIO HTML PER SCROLL AUTOMATICO ---
-                st.markdown("<div id='sezione_scheda_studente'></div>", unsafe_allow_html=True)
-                
                 st.write("### 🔍 Scheda Informativa Aula Selezionata")
                 
                 if st.session_state.target_studente:
                     s_data, s_lab, s_ora = st.session_state.target_studente
-                    st.toast(f"Caricati dettagli per {s_lab} ({s_ora})") # Feedback istantaneo a comparsa
+                    st.toast(f"Caricati dettagli per {s_lab} ({s_ora})")
                     
                     with st.container(border=True):
                         if st.session_state.target_studente in st.session_state.prenotazioni:
                             dati_p = st.session_state.prenotazioni[st.session_state.target_studente]
-                            st.markdown(f"👤 **Docente Incaricato:** `{dati_p['prof']}` *(Nome Completo)*")
+                            st.markdown(f"👤 **Docente Incaricato:** `{dati_p['prof']}`")
                             st.markdown(f"📝 **Descrizione Attività:** {dati_p['motivo']}")
                             st.markdown("🚦 **Stato dell'aula:** 🔴 **Occupata regolarmente**")
                         elif st.session_state.target_studente in st.session_state.manutenzioni:
-                            st.markdown("👤 **Responsabile:** `Ufficio Tecnico / Personale ATA`")
+                            st.markdown("👤 **Responsabile:** `Ufficio Tecnico`")
                             st.markdown("📝 **Descrizione Attività:** Intervento urgente di manutenzione hardware/rete.")
                             st.markdown("🚦 **Stato dell'aula:** 🔧 **NON ACCESSIBILE (GUASTO)**")
                         else:
                             st.markdown("👤 **Docente Incaricato:** `Nessuno`")
                             st.markdown("📝 **Descrizione Attività:** Nessuna lezione programmata. L'aula è vuota.")
                             st.markdown("🚦 **Stato dell'aula:** 🟢 **LIBERA**")
-                    
-                    # --- INIEZIONE JAVASCRIPT PER LO SCROLL AUTOMATICO COMPORTAMENTALE ---
-                    if st.session_state.scroll_richiesto:
-                        st.components.v1.html("""
-                            <script>
-                                window.parent.document.getElementById('sezione_scheda_studente').scrollIntoView({behavior: 'smooth'});
-                            </script>
-                        """, height=0)
-                        st.session_state.scroll_richiesto = False # Resetta il trigger dello scroll
                 else:
-                    st.info("💡 Fai clic su un pulsante qualsiasi del tabellone sopra: la pagina scenderà da sola e ti mostrerà il nome completo del prof e la lezione.")
+                    st.info("💡 Fai clic su un pulsante qualsiasi del tabellone sopra per vederne i dettagli reali.")
                 
                 st.divider()
                 st.write("#### 🔎 Vuoi fare una ricerca rapida?")
@@ -374,8 +397,9 @@ else:
                             st.success(f"📖 **{k[1]}** | Ora: **{k[2]}** -> Docente: **{v['prof']}** (Attività: *{v['motivo']}*)")
                             trovato = True
                     if not trovato:
-                        st.warning("Nessuna lezione trovata con questa chiave di ricerca per oggi.")
+                        st.warning("Nessuna lezione trouvata con questa chiave di ricerca per oggi.")
 
+            # Modulo revoche Admin
             if ruolo == "Tecnico / Amministratore" and st.session_state.target_admin_delete:
                 st.error("### ⚠️ Modulo di Cancellazione d'Ufficio (Amministratore)")
                 t_data, t_lab, t_ora = st.session_state.target_admin_delete
@@ -397,6 +421,7 @@ else:
                                     "messaggio": f"La tua prenotazione in data {t_data.strftime('%d/%m')} alla {t_ora} nel laboratorio {t_lab} è stata **cancellata dal Personale Tecnico**. \n\n*Motivazione:* {nota_admin}"
                                 })
                                 del st.session_state.prenotazioni[st.session_state.target_admin_delete]
+                                salva_prenotazioni_su_disco()
                                 st.success("Prenotazione rimossa e professore avvisato nel suo pannello.")
                                 st.session_state.target_admin_delete = None
                                 st.rerun()
@@ -405,6 +430,7 @@ else:
                             st.session_state.target_admin_delete = None
                             st.rerun()
 
+            # Modulo Professore
             if ruolo == "Professore":
                 st.write("### ⚙️ Centro Operativo")
                 tab_desc, tab_scambio, tab_storico = st.tabs(["📝 Descrizione Ore", "🔄 Proponi Scambio d'Aula", "📋 Storico Richieste Inviate"])
@@ -416,6 +442,7 @@ else:
                         nuovo_motivo = st.text_input("Classe e Materia (Inserisci dettagli chiari per gli studenti):", value=st.session_state.prenotazioni[scelta_p]["motivo"])
                         if st.button("Aggiorna sul Tabellone"):
                             st.session_state.prenotazioni[scelta_p]["motivo"] = nuovo_motivo
+                            salva_prenotazioni_su_disco()
                             st.success("Tabellone aggiornato!")
                             st.rerun()
                     else:
@@ -516,6 +543,7 @@ else:
                             chiave_target = (r_data, req.get('lab'), req.get('ora'))
                             st.session_state.prenotazioni[chiave_target] = {"prof": req.get('da'), "motivo": "Scambio Concesso"}
                             st.session_state.scambi[idx]["stato"] = "Accettato"
+                            salva_prenotazioni_su_disco()
                             
                             st.session_state.notifiche_sistema.append({
                                 "destinatario": req.get('da'),
@@ -525,7 +553,7 @@ else:
                             st.toast("Scambio approvato!")
                             st.rerun()
                         
-                        motivo_rifiuto = st.text_input("Motivo del rifiuto:", key=f"mot_{idx}", placeholder="Es: Ho una verifica...")
+                        motivo_rifiuto = st.text_input("Motivo del rotiuto:", key=f"mot_{idx}", placeholder="Es: Ho una verifica...")
                         if st.button("❌ Rifiuta Scambio", key=f"rif_{idx}", use_container_width=True):
                             if motivo_rifiuto.strip() == "":
                                 st.error("Inserisci una motivazione prima di rifiutare!")
