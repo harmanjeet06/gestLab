@@ -5,39 +5,6 @@ import pandas as pd
 # --- CONFIGURAZIONE PAGINA ---
 st.set_page_config(page_title="GestLab Cloud Secure", layout="wide", initial_sidebar_state="expanded")
 
-# --- STILE CSS PER I PULSANTI COLORATI ---
-st.markdown("""
-<style>
-    /* Pulsanti LIBERO (Verdi) */
-    div.stButton > button.p-libero {
-        background-color: #28a745 !important;
-        color: white !important;
-        border: none !important;
-        font-weight: bold !important;
-    }
-    /* Pulsanti OCCUPATO (Rossi) */
-    div.stButton > button.p-occupato {
-        background-color: #dc3545 !important;
-        color: white !important;
-        border: none !important;
-        font-weight: bold !important;
-    }
-    /* Pulsanti MANUTENZIONE (Grigi/Neri) */
-    div.stButton > button.p-manutenzione {
-        background-color: #343a40 !important;
-        color: white !important;
-        border: none !important;
-        font-weight: bold !important;
-    }
-    /* Pulsanti INTERVALLO (Azzurri) */
-    div.stButton > button.p-intervallo {
-        background-color: #17a2b8 !important;
-        color: white !important;
-        border: none !important;
-    }
-</style>
-""", unsafe_allow_html=True)
-
 # --- CONNESSIONE A GOOGLE SHEETS (VIA URL CSV PUBBLICO) ---
 GOOGLE_SHEET_ID = "1T83Ofmcesg_YoYbKkLHM1LFaw0c72AHwo9QTPyIb0kM"
 
@@ -164,7 +131,7 @@ if not st.session_state.autenticato:
                 st.rerun()
 
 # ==========================================
-# APPLICAZIONE ATTIVA
+# APPLICAZIONE ATTIVA (TABELLONE ALLINEATO)
 # ==========================================
 else:
     ruolo = st.session_state.ruolo
@@ -199,65 +166,66 @@ else:
     if giorno_testo in GIORNI:
         schema_orario = get_orari_per_giorno(giorno_testo)
 
-        st.write("### 📊 Stato dei 3 Laboratori")
+        st.write("### 📊 Stato Disponibilità")
         
-        # 4 colonne: Orari, Info, AutoCAD, Sistel
-        col_orari, col_l1, col_l2, col_l3 = st.columns([2, 3, 3, 3])
-        colonne_lab = [col_l1, col_l2, col_l3]
-        
-        with col_orari:
-            st.write("**Ora / Fascia**")
-            for slot in schema_orario:
-                st.write(f"🕒 **{slot['ora']}**\n({slot['inizio']}-{slot['fine']})")
-                st.write("") # Spaziatore
+        # DEFINIZIONE INTESTAZIONI GRIGLIA
+        col_orari, col_l1, col_l2, col_l3 = st.columns([3, 3, 3, 3])
+        with col_orari: st.markdown("**🕒 Ora / Fascia**")
+        with col_l1: st.markdown("**💻 Laboratorio Info**")
+        with col_l2: st.markdown("**📐 Laboratorio AutoCAD**")
+        with col_l3: st.markdown("**🔌 Laboratorio Sistel**")
+        st.divider()
 
-        # Ciclo sui 3 laboratori
-        for i_lab, laboratorio in enumerate(LABORATORI):
-            with colonne_lab[i_lab]:
-                st.write(f"🏢 **{laboratorio}**")
+        # COSTRUZIONE RIGIDA RIGA PER RIGA (Previene qualsiasi scombinazione grafica)
+        for slot in schema_orario:
+            riga_ora, riga_l1, riga_l2, riga_l3 = st.columns([3, 3, 3, 3])
+            
+            # 1. Colonna Orario
+            with riga_ora:
+                st.write(f"**{slot['ora']}** \n({slot['inizio']} - {slot['fine']})")
+            
+            # Ciclo sui 3 laboratori per la riga corrente
+            for i_lab, laboratorio in enumerate(LABORATORI):
+                colonna_corrente = [riga_l1, riga_l2, riga_l3][i_lab]
+                chiave = (data_selezionata, laboratorio, slot['ora'])
                 
-                for slot in schema_orario:
-                    chiave = (data_selezionata, laboratorio, slot['ora'])
-                    
+                with colonna_corrente:
                     if not slot['prenotabile']:
-                        st.button(f"☕ Intervallo", key=f"int_{laboratorio}_{slot['ora']}", disabled=True, use_container_width=True)
+                        st.button("☕ Intervallo", key=f"int_{laboratorio}_{slot['ora']}", disabled=True, use_container_width=True)
                     
                     elif chiave in st.session_state.manutenzioni:
-                        testo = f"🔧 GUASTO: {st.session_state.manutenzioni[chiave]}"
-                        # Classe CSS 'p-manutenzione' per farlo grigio scuro
-                        st.button(testo, key=f"btn_{chiave}", help="Cliccato", use_container_width=True)
+                        st.button(f"🔧 GUASTO: {st.session_state.manutenzioni[chiave][:15]}...", key=f"btn_{chiave}", disabled=True, use_container_width=True)
                     
                     elif chiave in st.session_state.prenotazioni:
                         proprietario = st.session_state.prenotazioni[chiave]['prof']
                         motivo_pren = st.session_state.prenotazioni[chiave]['motivo']
                         
                         if proprietario == utente_attivo:
-                            testo = f"📋 Tuo ({motivo_pren})\n[Cancella sotto]"
-                            # Classe CSS custom applicata tramite trucco html/markdown o testo descrittivo
-                            if st.button(testo, key=f"btn_{chiave}", use_container_width=True):
-                                st.toast("Scorri in basso nel tab 'Mie Prenotazioni' per cancellare.")
+                            if st.button(f"📋 Tuo ({motivo_pren[:12]})", key=f"btn_{chiave}", type="secondary", use_container_width=True):
+                                st.toast("Usa il pannello in basso per cancellare.")
                         else:
-                            testo = f"🔴 {proprietario}\n({motivo_pren})"
-                            if st.button(testo, key=f"btn_{chiave}", use_container_width=True):
+                            if st.button(f"🔴 {proprietario[:12]} ({motivo_pren[:10]})", key=f"btn_{chiave}", type="secondary", use_container_width=True):
                                 if ruolo == "Professore":
                                     st.session_state.lab_selezionato_click = laboratorio
                                     st.session_state.ora_selezionata_click = slot['ora']
-                                    st.toast(f"Selezionato slot di {proprietario} per lo scambio!")
+                                    st.toast(f"Selezionato slot di {proprietario} per scambio.")
                                     st.rerun()
                     else:
-                        testo = f"🟢 LIBERO\n[Seleziona]"
-                        if st.button(testo, key=f"btn_{chiave}", use_container_width=True):
-                            if ruolo == "Professore" or ruolo == "Tecnico / Amministratore":
+                        # Spieghiamo a Streamlit che LIBERO = Tasto Principale (Verde nativo nei temi dark/light corretti)
+                        if st.button("🟢 LIBERO (Seleziona)", key=f"btn_{chiave}", type="primary", use_container_width=True):
+                            if ruolo in ["Professore", "Tecnico / Amministratore"]:
                                 st.session_state.lab_selezionato_click = laboratorio
                                 st.session_state.ora_selezionata_click = slot['ora']
-                                st.toast(f"Selezionato: {laboratorio} ({slot['ora']})")
+                                st.toast(f"Selezionato: {laboratorio} - {slot['ora']}")
                                 st.rerun()
+            st.write("---") # Sottile linea di allineamento orizzontale tra le ore
 
-        st.divider()
-        st.write("### ⚙️ Area Operativa (Dati pre-compilati dal click sopra)")
-        st.info(f"Slot attualmente selezionato dal tabellone: **{st.session_state.lab_selezionato_click}** alla **{st.session_state.ora_selezionata_click}**")
+        # ==========================================
+        # AREA OPERATIVA SOTTOSTANTE
+        # ==========================================
+        st.write("### ⚙️ Area Operativa")
+        st.success(f"📍 Slot selezionato dal tabellone: **{st.session_state.lab_selezionato_click}** alla **{st.session_state.ora_selezionata_click}**")
 
-        # --- INTERFACCIA PROFESSORE ---
         if ruolo == "Professore":
             tab1, tab2, tab3 = st.tabs(["🆕 Nuova Prenotazione", "🔄 Richiedi Scambio", "📋 Mie Prenotazioni"])
             
@@ -272,8 +240,6 @@ else:
                     chiave_pren = (data_selezionata, lab_scelto, ora_scelta)
                     if chiave_pren in st.session_state.prenotazioni:
                         st.error("Slot già occupato.")
-                    elif chiave_pren in st.session_state.manutenzioni:
-                        st.error("In manutenzione.")
                     elif motivo.strip() == "":
                         st.warning("Inserisci la materia.")
                     else:
@@ -294,9 +260,9 @@ else:
                         msg = st.text_area("Messaggio per il collega:")
                         if st.button("Spedisci richiesta", key="send_s"):
                             st.session_state.scambi.append({"da_prof": utente_attivo, "a_prof": prof_dest, "data": data_selezionata, "lab": lab_scambio, "ora": ora_scambio, "messaggio": msg, "stato": "In attesa"})
-                            st.success("Richiesta inviata con successo!")
+                            st.success("Richiesta inviata!")
                 else:
-                    st.info("Lo slot selezionato è vuoto, puoi bloccarlo direttamente dal primo tab.")
+                    st.info("Lo slot è vuoto, puoi bloccarlo direttamente nel primo tab.")
 
             with tab3:
                 st.subheader("Riepilogo ore prenotate a tuo nome")
@@ -309,7 +275,6 @@ else:
                         del st.session_state.prenotazioni[k]
                         st.rerun()
 
-        # --- INTERFACCIA STUDENTE ---
         elif ruolo == "Studente":
             st.subheader("🔍 Ricerca rapida lezioni")
             testo_cercato = st.text_input("Inserisci classe o materia:")
@@ -322,14 +287,13 @@ else:
                 if not trovato:
                     st.write("Nessuna corrispondenza trovata.")
 
-        # --- INTERFACCIA AMMINISTRATORE ---
         elif ruolo == "Tecnico / Amministratore":
             st.subheader("🔧 Pannello Manutenzioni Hardware")
             lab_m = st.selectbox("Laboratorio:", LABORATORI, index=LABORATORI.index(st.session_state.lab_selezionato_click))
             ora_m = st.selectbox("Ora:", [s['ora'] for s in schema_orario if s['prenotabile']], index=[s['ora'] for s in schema_orario if s['prenotabile']].index(st.session_state.ora_selezionata_click))
             motivo_m = st.text_input("Guasto riscontrato:")
             
-            if st.button("Metti in Manutenzione (Blocca slot)", type="primary"):
+            if st.button("Metti in Manutenzione", type="primary"):
                 if motivo_m.strip():
                     chiave_m = (data_selezionata, lab_m, ora_m)
                     if chiave_m in st.session_state.prenotazioni:
