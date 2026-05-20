@@ -71,7 +71,6 @@ if "notifiche_sistema" not in st.session_state: st.session_state.notifiche_siste
 if "target_scambio" not in st.session_state: st.session_state.target_scambio = None
 if "target_admin_delete" not in st.session_state: st.session_state.target_admin_delete = None
 if "target_studente" not in st.session_state: st.session_state.target_studente = None
-if "scroll_counter" not in st.session_state: st.session_state.scroll_counter = 0
 
 dizionario_utenti = carica_utenti_da_sheets()
 elenco_classi = carica_classi_da_sheets()
@@ -95,7 +94,7 @@ def get_orari_per_giorno(giorno):
             {"ora": "1ª ora", "inizio": "08:00", "fine": "09:00", "prenotabile": True},
             {"ora": "2ª ora", "inizio": "09:00", "fine": "10:00", "prenotabile": True},
             {"ora": "3ª ora", "inizio": "10:00", "fine": "10:55", "prenotabile": True},
-            {"ora": "Intervallo", "inizio": "10:55", "fine": "11:10", "prenotabile": False},
+            {"ora": "Intervallo", "indent": "10:55", "fine": "11:10", "prenotabile": False},
             {"ora": "4ª ora", "inizio": "11:10", "fine": "12:10", "prenotabile": True},
             {"ora": "5ª ora", "inizio": "12:10", "fine": "13:10", "prenotabile": True},
         ]
@@ -147,7 +146,6 @@ def prepara_admin_delete(chiave):
 
 def mostra_dettagli_studente(chiave):
     st.session_state.target_studente = chiave
-    st.session_state.scroll_counter += 1
 
 def gestisci_manutenzione(chiave, azione):
     if azione == "attiva":
@@ -210,13 +208,12 @@ else:
     utente_attivo = st.session_state.utente_attivo
 
     # Barra laterale (Sinistra)
-    st.sidebar.title("🧬 GestLab v2.6")
+    st.sidebar.title("🧬 GestLab v2.7")
     st.sidebar.write(f"Utente: **{utente_attivo}**")
     st.sidebar.write(f"Ruolo: `{ruolo}`")
     if st.sidebar.button("🚪 Esci dal sistema", use_container_width=True):
         st.session_state.autenticato = False
         st.session_state.target_studente = None
-        st.session_state.scroll_counter = 0
         st.rerun()
     if st.sidebar.button("🔄 Aggiorna Dati Sheets", use_container_width=True):
         st.cache_data.clear()
@@ -270,7 +267,7 @@ else:
                                 key=f"btn_{chiave}", 
                                 type="secondary", 
                                 use_container_width=True,
-                                disabled=(ruolo != "Tecnico / Amministratore" and ruolo != "Studente"),
+                                disabled=(ruolo != "Tecnico / Amministratore" and Platform_is_student := ruolo == "Studente"),
                                 on_click=mostra_dettagli_studente if ruolo == "Studente" else gestisci_manutenzione,
                                 args=(chiave, "disattiva") if ruolo != "Studente" else (chiave,)
                             )
@@ -325,16 +322,16 @@ else:
             st.write("---")
 
             # ==========================================
-            # SEZIONE INFORMATIVA IN BASSO
+            # SEZIONE INFORMATIVA IN BASSO (NATURALE E SENZA LOOP)
             # ==========================================
             if ruolo == "Studente":
-                st.markdown("<div id='scheda_dettagli_studente'></div>", unsafe_allow_html=True)
                 st.write("### 🔍 Scheda Informativa Aula Selezionata")
                 
                 if st.session_state.target_studente:
                     s_data, s_lab, s_ora = st.session_state.target_studente
                     
-                    with st.container(border=True):
+                    # Usa un Expander pre-aperto nativo: si aggiorna istantaneamente e cattura subito lo sguardo
+                    with st.expander(f"📊 Dettagli attuali: {s_lab} alla {s_ora}", expanded=True):
                         if st.session_state.target_studente in st.session_state.prenotazioni:
                             dati_p = st.session_state.prenotazioni[st.session_state.target_studente]
                             st.markdown(f"👤 **Docente:** {dati_p['prof']}")
@@ -348,20 +345,6 @@ else:
                             st.markdown("👤 **Docente:** Nessuno")
                             st.markdown("📝 **Attività:** Nessuna attività programmata")
                             st.markdown("🚦 **Stato:** 🟢 Libera")
-                    
-                    # BLOCCO JAVASCRIPT CORRETTO SENZA F-STRING (Nessun Crash su Python 3.14)
-                    codice_js = """
-                    <script>
-                        setTimeout(function() {
-                            var el = window.parent.document.getElementById('scheda_dettagli_studente');
-                            if (el) {
-                                el.scrollIntoView({behavior: 'smooth', block: 'start'});
-                            }
-                        }, 100);
-                    </script>
-                    """
-                    st.components.v1.html(codice_js, height=0, key="scroll_js_" + str(st.session_state.scroll_counter))
-                    
                 else:
                     st.info("💡 Fai clic su un bottone qualsiasi del tabellone sopra per vederne i dettagli qui.")
                 
@@ -375,7 +358,7 @@ else:
                             st.success(f"📖 **{k[1]}** | Ora: **{k[2]}** -> Docente: **{v['prof']}** (Attività: *{v['motivo']}*)")
                             trovato = True
                     if not trovato:
-                        st.warning("Nessuna lezione trouvata con questa chiave di ricerca per oggi.")
+                        st.warning("Nessuna lezione trovata con questa chiave di ricerca per oggi.")
 
             # Modulo revoche Admin
             if ruolo == "Tecnico / Amministratore" and st.session_state.target_admin_delete:
