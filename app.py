@@ -5,10 +5,10 @@ import pandas as pd
 # --- CONFIGURAZIONE PAGINA ---
 st.set_page_config(page_title="GestLab Cloud Secure", layout="wide", initial_sidebar_state="expanded")
 
-# --- CSS INIETTATO PER FORZARE I COLORI REALI DEI PULSANTI ---
+# --- CSS PER I COLORI REALI DEI PULSANTI ---
 st.markdown("""
 <style>
-    /* Forza il colore VERDE per i pulsanti LIBERO */
+    /* VERDE per i pulsanti LIBERO */
     div.stButton > button[data-testid="baseButton-primary"] {
         background-color: #28a745 !important;
         color: white !important;
@@ -16,9 +16,8 @@ st.markdown("""
     }
     div.stButton > button[data-testid="baseButton-primary"]:hover {
         background-color: #218838 !important;
-        color: white !important;
     }
-    /* Forza il colore ROSSO per i pulsanti OCCUPATO */
+    /* ROSSO per i pulsanti OCCUPATO / TUO */
     div.stButton > button[data-testid="baseButton-secondary"] {
         background-color: #dc3545 !important;
         color: white !important;
@@ -26,7 +25,6 @@ st.markdown("""
     }
     div.stButton > button[data-testid="baseButton-secondary"]:hover {
         background-color: #c82333 !important;
-        color: white !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -48,7 +46,7 @@ def carica_utenti_da_sheets():
                 "nominativo": str(row["nominativo"]).strip()
             }
         return utenti
-    except Exception as e:
+    except:
         return {}
 
 @st.cache_data(ttl=60)
@@ -56,22 +54,16 @@ def carica_classi_da_sheets():
     try:
         df = pd.read_csv(URL_STUDENTI)
         return df["classe"].dropna().astype(str).tolist()
-    except Exception as e:
+    except:
         return []
 
-# --- INIZIALIZZAZIONE MEMORIA DI SESSIONE (STATO PERSISTENTE) ---
+# --- INIZIALIZZAZIONE MEMORIA STATO PERSISTENTE ---
 if "autenticato" not in st.session_state: st.session_state.autenticato = False
 if "ruolo" not in st.session_state: st.session_state.ruolo = None
 if "utente_attivo" not in st.session_state: st.session_state.utente_attivo = None
 
-# Memoria globale per non perdere i dati ai click
 if "prenotazioni" not in st.session_state: st.session_state.prenotazioni = {}
-if "scambi" not in st.session_state: st.session_state.scambi = []
 if "manutenzioni" not in st.session_state: st.session_state.manutenzioni = {}
-
-# Variabili di memoria per i click sul tabellone
-if "lab_selezionato_click" not in st.session_state: st.session_state.lab_selezionato_click = "Info"
-if "ora_selezionata_click" not in st.session_state: st.session_state.ora_selezionata_click = "1ª ora"
 
 dizionario_utenti = carica_utenti_da_sheets()
 elenco_classi = carica_classi_da_sheets()
@@ -100,6 +92,23 @@ def get_orari_per_giorno(giorno):
             {"ora": "5ª ora", "inizio": "12:10", "fine": "13:10", "prenotabile": True},
         ]
 
+# --- FUNZIONI DI CALLBACK PER AZIONI IMMEDIATE AL CLICK ---
+def esegui_prenotazione(chiave, prof):
+    st.session_state.prenotazioni[chiave] = {"prof": prof, "motivo": "Lezione Didattica"}
+
+def cancella_prenotazione(chiave):
+    if chiave in st.session_state.prenotazioni:
+        del st.session_state.prenotazioni[chiave]
+
+def gestisci_manutenzione(chiave, azione):
+    if azione == "attiva":
+        if chiave in st.session_state.prenotazioni:
+            del st.session_state.prenotazioni[chiave]
+        st.session_state.manutenzioni[chiave] = "Sospensione Tecnica"
+    elif azione == "disattiva":
+        if chiave in st.session_state.manutenzioni:
+            del st.session_state.manutenzioni[chiave]
+
 # ==========================================
 # SCHERMATA DI LOGIN
 # ==========================================
@@ -111,9 +120,7 @@ if not st.session_state.autenticato:
         with st.form("form_login"):
             username_input = st.text_input("Username scolastico:")
             password_input = st.text_input("Password:", type="password")
-            pulsante_login = st.form_submit_button("Effettua Login")
-            
-            if pulsante_login:
+            if st.form_submit_button("Effettua Login"):
                 user_clean = username_input.strip()
                 pass_clean = password_input.strip()
                 
@@ -128,8 +135,7 @@ if not st.session_state.autenticato:
                     st.session_state.utente_attivo = dizionario_utenti[user_clean]["nominativo"]
                     st.rerun()
                 else:
-                    st.error("Credenziali non corrette.")
-                    
+                    st.error("Credenziali errate.")
     else:
         with st.form("form_studenti"):
             classe_selezionata = st.selectbox("Seleziona la tua Classe:", elenco_classi)
@@ -140,54 +146,47 @@ if not st.session_state.autenticato:
                 st.rerun()
 
 # ==========================================
-# APPLICAZIONE ATTIVA
+# APPLICAZIONE ATTIVA (ONE-CLICK REAL WORKING)
 # ==========================================
 else:
     ruolo = st.session_state.ruolo
     utente_attivo = st.session_state.utente_attivo
 
-    st.sidebar.title("🧬 GestLab v1.3")
+    st.sidebar.title("🧬 GestLab v1.5")
     st.sidebar.write(f"Utente: **{utente_attivo}**")
     st.sidebar.write(f"Ruolo: `{ruolo}`")
     
-    if st.sidebar.button("🚪 Esci dal sistema"):
+    if st.sidebar.button("🚪 Esci"):
         st.session_state.autenticato = False
         st.rerun()
-        
-    if st.sidebar.button("🔄 Forza Aggiornamento Database"):
+    if st.sidebar.button("🔄 Aggiorna DB"):
         st.cache_data.clear()
         st.rerun()
 
-    st.title("🖥️ Tabellone Orari e Prenotazione Laboratori")
+    st.title("🖥️ Tabellone Orari Interattivo")
     st.divider()
 
-    col_data1, col_data2 = st.columns([1, 3])
-    with col_data1:
-        data_selezionata = st.date_input("Seleziona Data:", datetime.date.today())
-        giorni_settimana_eng = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
-        giorno_testo = giorni_settimana_eng[data_selezionata.weekday()]
+    data_selezionata = st.date_input("Seleziona Data:", datetime.date.today())
+    giorni_settimana_eng = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
+    giorno_testo = giorni_settimana_eng[data_selezionata.weekday()]
 
-    with col_data2:
-        st.subheader(f"📅 Giorno: {giorno_testo} {data_selezionata.strftime('%d/%m/%Y')}")
+    st.subheader(f"📅 {giorno_testo} {data_selezionata.strftime('%d/%m/%Y')}")
 
     if giorno_testo in GIORNI:
         schema_orario = get_orari_per_giorno(giorno_testo)
 
-        st.write("### 📊 Tabellone di Stato")
-        
         col_orari, col_l1, col_l2, col_l3 = st.columns([3, 3, 3, 3])
         with col_orari: st.markdown("**🕒 Ora / Fascia**")
-        with col_l1: st.markdown("**💻 Laboratorio Info**")
-        with col_l2: st.markdown("**📐 Laboratorio AutoCAD**")
-        with col_l3: st.markdown("**🔌 Laboratorio Sistel**")
+        with col_l1: st.markdown("**💻 Info**")
+        with col_l2: st.markdown("**📐 AutoCAD**")
+        with col_l3: st.markdown("**🔌 Sistel**")
         st.divider()
 
-        # COSTRUZIONE RIGIDA DELLA GRIGLIA
         for slot in schema_orario:
             riga_ora, riga_l1, riga_l2, riga_l3 = st.columns([3, 3, 3, 3])
             
             with riga_ora:
-                st.write(f"**{slot['ora']}** \n({slot['inizio']} - {slot['fine']})")
+                st.write(f"**{slot['ora']}** \n({slot['inizio']}-{slot['fine']})")
             
             for i_lab, laboratorio in enumerate(LABORATORI):
                 colonna_corrente = [riga_l1, riga_l2, riga_l3][i_lab]
@@ -198,107 +197,59 @@ else:
                         st.button("☕ Intervallo", key=f"int_{laboratorio}_{slot['ora']}", disabled=True, use_container_width=True)
                     
                     elif chiave in st.session_state.manutenzioni:
-                        st.button(f"🔧 MANUTENZIONE", key=f"btn_{chiave}", disabled=True, use_container_width=True)
+                        # Se l'admin ci clicca, sblocca il laboratorio istantaneamente
+                        st.button(
+                            "🔧 GUASTO \n[Sblocca]", 
+                            key=f"btn_{chiave}", 
+                            type="secondary", 
+                            use_container_width=True,
+                            disabled=(ruolo != "Tecnico / Amministratore"),
+                            on_click=gestisci_manutenzione,
+                            args=(chiave, "disattiva")
+                        )
                     
                     elif chiave in st.session_state.prenotazioni:
                         proprietario = st.session_state.prenotazioni[chiave]['prof']
                         motivo_pren = st.session_state.prenotazioni[chiave]['motivo']
                         
-                        # Tasto occupato (Colore Rosso forzato da CSS tramite type="secondary")
-                        if st.button(f"🔴 {proprietario[:10]} ({motivo_pren[:10]})", key=f"btn_{chiave}", type="secondary", use_container_width=True):
-                            if ruolo == "Professore" and proprietario != utente_attivo:
-                                st.session_state.lab_selezionato_click = laboratorio
-                                st.session_state.ora_selezionata_click = slot['ora']
-                                st.rerun()
+                        if proprietario == utente_attivo:
+                            # Se clicchi sul TUO bottone rosso, si cancella subito
+                            st.button(
+                                f"📋 Tuo: {motivo_pren[:10]} \n[CANCELLA]", 
+                                key=f"btn_{chiave}", 
+                                type="secondary", 
+                                use_container_width=True,
+                                on_click=cancella_prenotazione,
+                                args=(chiave,)
+                            )
+                        else:
+                            # Se è di un altro professore, mostra chi lo occupa (pulsante disattivato per te)
+                            st.button(f"🔴 {proprietario[:10]} \n({motivo_pren[:10]})", key=f"btn_{chiave}", type="secondary", use_container_width=True, disabled=True)
                     else:
-                        # Tasto libero (Colore Verde forzato da CSS tramite type="primary")
-                        if st.button("🟢 LIBERO", key=f"btn_{chiave}", type="primary", use_container_width=True):
-                            if ruolo in ["Professore", "Tecnico / Amministratore"]:
-                                st.session_state.lab_selezionato_click = laboratorio
-                                st.session_state.ora_selezionata_click = slot['ora']
-                                st.rerun()
+                        # Se lo slot è LIBERO (Verde)
+                        if ruolo == "Professore":
+                            # Il professore prenota all'istante
+                            st.button("🟢 LIBERO \n[Prenota]", key=f"btn_{chiave}", type="primary", use_container_width=True, on_click=esegui_prenotazione, args=(chiave, utente_attivo))
+                        elif ruolo == "Tecnico / Amministratore":
+                            # L'admin mette in manutenzione all'istante
+                            st.button("🟢 LIBERO \n[Disattiva Aula]", key=f"btn_{chiave}", type="primary", use_container_width=True, on_click=gestisci_manutenzione, args=(chiave, "attiva"))
+                        else:
+                            # Gli studenti vedono solo la dicitura Libero senza poter cliccare
+                            st.button("🟢 LIBERO", key=f"btn_{chiave}", type="primary", use_container_width=True, disabled=True)
             st.write("---")
 
         # ==========================================
-        # AREA OPERATIVA (PERSISTENTE E AGGIORNATA)
+        # STRUMENTO DI PERSONALIZZAZIONE TESTI
         # ==========================================
-        st.write("### ⚙️ Area Operativa")
-        st.info(f"📍 Selezionato nel tabellone: **{st.session_state.lab_selezionato_click}** alla **{st.session_state.ora_selezionata_click}**")
-
         if ruolo == "Professore":
-            tab1, tab2, tab3 = st.tabs(["🆕 Nuova Prenotazione", "🔄 Richiedi Scambio", "📋 Mie Prenotazioni"])
+            st.write("### 📝 Personalizza il nome della tua lezione")
+            mie_p = [k for k, v in st.session_state.prenotazioni.items() if v["prof"] == utente_attivo and k[0] == data_selezionata]
             
-            with tab1:
-                st.write("#### Inserisci i dettagli per bloccare l'aula:")
-                # I selettori leggono il valore salvato nella sessione
-                lab_scelto = st.selectbox("Laboratorio:", LABORATORI, index=LABORATORI.index(st.session_state.lab_selezionato_click), key="sel_l")
-                ore_disp = [s['ora'] for s in schema_orario if s['prenotabile']]
-                ora_scelta = st.selectbox("Ora:", ore_disp, index=ore_disp.index(st.session_state.ora_selezionata_click), key="sel_o")
-                motivo = st.text_input("Classe / Materia (Es: 5A - Sistemi):", key="act")
-                
-                if st.button("Salva sul Tabellone", type="primary", key="save_p"):
-                    chiave_pren = (data_selezionata, lab_scelto, ora_scelta)
-                    if chiave_pren in st.session_state.prenotazioni:
-                        st.error("Questo slot è stato occupato un attimo fa!")
-                    elif motivo.strip() == "":
-                        st.warning("Devi scrivere la classe/materia prima di salvare.")
-                    else:
-                        # Salviamo nella sessione sicura!
-                        st.session_state.prenotazioni[chiave_pren] = {"prof": utente_attivo, "motivo": motivo}
-                        st.success("Prenotazione registrata con successo!")
-                        st.rerun()
-
-            with tab2:
-                st.subheader("Invia proposta di scambio")
-                lab_scambio = st.selectbox("Laboratorio:", LABORATORI, index=LABORATORI.index(st.session_state.lab_selezionato_click), key="s_l")
-                ora_scambio = st.selectbox("Ora:", [s['ora'] for s in schema_orario if s['prenotabile']], index=[s['ora'] for s in schema_orario if s['prenotabile']].index(st.session_state.ora_selezionata_click), key="s_o")
-                chiave_scambio = (data_selezionata, lab_scambio, ora_scambio)
-                
-                if chiave_scambio in st.session_state.prenotazioni:
-                    prof_dest = st.session_state.prenotazioni[chiave_scambio]['prof']
-                    if prof_dest != utente_attivo:
-                        st.write(f"Destinatario richiesta: **{prof_dest}**")
-                        msg = st.text_area("Messaggio per il collega:")
-                        if st.button("Spedisci richiesta", key="send_s"):
-                            st.session_state.scambi.append({"da_prof": utente_attivo, "a_prof": prof_dest, "data": data_selezionata, "lab": lab_scambio, "ora": ora_scambio, "messaggio": msg, "stato": "In attesa"})
-                            st.success("Richiesta inviata!")
-                else:
-                    st.info("Questo slot è vuoto. Usa il primo pannello per prenderlo subito.")
-
-            with tab3:
-                st.subheader("Le tue prenotazioni di oggi")
-                elenco_mie = [k for k, v in st.session_state.prenotazioni.items() if v["prof"] == utente_attivo]
-                if not elenco_mie:
-                    st.write("Nessuna prenotazione effettuata per oggi.")
-                for k in elenco_mie:
-                    st.write(f"• **{k[1]}** alla **{k[2]}** -> *{st.session_state.prenotazioni[k]['motivo']}*")
-                    if st.button("Elimina ed eliditi dello slot", key=f"del_{k[1]}_{k[2]}"):
-                        del st.session_state.prenotazioni[k]
-                        st.rerun()
-
-        elif ruolo == "Studente":
-            st.subheader("🔍 Cerca la tua Aula")
-            testo_cercato = st.text_input("Cerca Classe o Materia:")
-            if testo_cercato:
-                trovato = False
-                for k, v in st.session_state.prenotazioni.items():
-                    if testo_cercato.lower() in v["motivo"].lower() and k[0] == data_selezionata:
-                        st.write(f"📖 **{k[1]}** | Ora: **{k[2]}** -> Lezione di: {v['motivo']} ({v['prof']})")
-                        trovato = True
-                if not trovato:
-                    st.write("Nessuna lezione trovata.")
-
-        elif ruolo == "Tecnico / Amministratore":
-            st.subheader("🔧 Gestione Manutenzioni")
-            lab_m = st.selectbox("Laboratorio:", LABORATORI, index=LABORATORI.index(st.session_state.lab_selezionato_click))
-            ora_m = st.selectbox("Ora:", [s['ora'] for s in schema_orario if s['prenotabile']], index=[s['ora'] for s in schema_orario if s['prenotabile']].index(st.session_state.ora_selezionata_click))
-            motivo_m = st.text_input("Specifiche del Guasto:")
-            
-            if st.button("Attiva Blocco Laboratorio", type="primary"):
-                if motivo_m.strip():
-                    chiave_m = (data_selezionata, lab_m, ora_m)
-                    if chiave_m in st.session_state.prenotazioni:
-                        del st.session_state.prenotazioni[chiave_m]
-                    st.session_state.manutenzioni[chiave_m] = motivo_m
-                    st.success("Laboratorio bloccato!")
+            if mie_p:
+                scelta_p = st.selectbox("Seleziona quale delle tue ore odierne vuoi modificare:", mie_p, format_func=lambda x: f"{x[1]} alla {x[2]}")
+                nuovo_motivo = st.text_input("Inserisci Classe e Materia (Es: 4A - AutoCAD):", value=st.session_state.prenotazioni[scelta_p]["motivo"])
+                if st.button("Salva ed esponi sul tabellone", type="primary"):
+                    st.session_state.prenotazioni[scelta_p]["motivo"] = nuovo_motivo
                     st.rerun()
+            else:
+                st.info("💡 Fai clic su un pulsante verde `🟢 LIBERO` del tabellone in alto per creare all'istante la tua prima prenotazione di oggi.")
