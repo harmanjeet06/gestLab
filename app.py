@@ -71,6 +71,7 @@ if "notifiche_sistema" not in st.session_state: st.session_state.notifiche_siste
 if "target_scambio" not in st.session_state: st.session_state.target_scambio = None
 if "target_admin_delete" not in st.session_state: st.session_state.target_admin_delete = None
 if "target_studente" not in st.session_state: st.session_state.target_studente = None
+if "scroll_richiesto" not in st.session_state: st.session_state.scroll_richiesto = False
 
 dizionario_utenti = carica_utenti_da_sheets()
 elenco_classi = carica_classi_da_sheets()
@@ -94,7 +95,7 @@ def get_orari_per_giorno(giorno):
             {"ora": "1ª ora", "inizio": "08:00", "fine": "09:00", "prenotabile": True},
             {"ora": "2ª ora", "inizio": "09:00", "fine": "10:00", "prenotabile": True},
             {"ora": "3ª ora", "inizio": "10:00", "fine": "10:55", "prenotabile": True},
-            {"ora": "Intervallo", "indent": "10:55", "fine": "11:10", "prenotabile": False},
+            {"ora": "Intervallo", "inizio": "10:55", "fine": "11:10", "prenotabile": False},
             {"ora": "4ª ora", "inizio": "11:10", "fine": "12:10", "prenotabile": True},
             {"ora": "5ª ora", "inizio": "12:10", "fine": "13:10", "prenotabile": True},
         ]
@@ -146,6 +147,7 @@ def prepara_admin_delete(chiave):
 
 def mostra_dettagli_studente(chiave):
     st.session_state.target_studente = chiave
+    st.session_state.scroll_richiesto = True # Attiva il flag per lo scroll automatico
 
 def gestisci_manutenzione(chiave, azione):
     if azione == "attiva":
@@ -208,12 +210,13 @@ else:
     utente_attivo = st.session_state.utente_attivo
 
     # Barra laterale (Sinistra)
-    st.sidebar.title("🧬 GestLab v2.7")
+    st.sidebar.title("🧬 GestLab v2.5")
     st.sidebar.write(f"Utente: **{utente_attivo}**")
     st.sidebar.write(f"Ruolo: `{ruolo}`")
     if st.sidebar.button("🚪 Esci dal sistema", use_container_width=True):
         st.session_state.autenticato = False
         st.session_state.target_studente = None
+        st.session_state.scroll_richiesto = False
         st.rerun()
     if st.sidebar.button("🔄 Aggiorna Dati Sheets", use_container_width=True):
         st.cache_data.clear()
@@ -225,7 +228,7 @@ else:
     with col_main:
         st.title("🖥️ Tabellone Orari Interattivo")
         if ruolo == "Studente":
-            st.write("👉 **Clicca su un'aula** per scendere istantaneamente ai dettagli dell'attività in fondo alla pagina.")
+            st.write("👉 **Clicca su un'aula** per caricare e scorrere automaticamente ai dettagli completi dell'attività in fondo alla pagina.")
         else:
             st.write("👉 Clicca su `🟢 LIBERO` per prenotare o sul tuo bottone rosso per agire sulla prenotazione.")
         st.divider()
@@ -267,7 +270,7 @@ else:
                                 key=f"btn_{chiave}", 
                                 type="secondary", 
                                 use_container_width=True,
-                                disabled=(ruolo != "Tecnico / Amministratore" and Platform_is_student := ruolo == "Studente"),
+                                disabled=(ruolo != "Tecnico / Amministratore" and ruolo != "Studente"),
                                 on_click=mostra_dettagli_studente if ruolo == "Studente" else gestisci_manutenzione,
                                 args=(chiave, "disattiva") if ruolo != "Studente" else (chiave,)
                             )
@@ -322,31 +325,44 @@ else:
             st.write("---")
 
             # ==========================================
-            # SEZIONE INFORMATIVA IN BASSO (NATURALE E SENZA LOOP)
+            # PANNELLO STRUMENTI IN BASSO / SEZIONE DETTAGLI
             # ==========================================
+            
             if ruolo == "Studente":
+                # --- ANCORAGGIO HTML PER SCROLL AUTOMATICO ---
+                st.markdown("<div id='sezione_scheda_studente'></div>", unsafe_allow_html=True)
+                
                 st.write("### 🔍 Scheda Informativa Aula Selezionata")
                 
                 if st.session_state.target_studente:
                     s_data, s_lab, s_ora = st.session_state.target_studente
+                    st.toast(f"Caricati dettagli per {s_lab} ({s_ora})") # Feedback istantaneo a comparsa
                     
-                    # Usa un Expander pre-aperto nativo: si aggiorna istantaneamente e cattura subito lo sguardo
-                    with st.expander(f"📊 Dettagli attuali: {s_lab} alla {s_ora}", expanded=True):
+                    with st.container(border=True):
                         if st.session_state.target_studente in st.session_state.prenotazioni:
                             dati_p = st.session_state.prenotazioni[st.session_state.target_studente]
-                            st.markdown(f"👤 **Docente:** {dati_p['prof']}")
-                            st.markdown(f"📝 **Attività:** {dati_p['motivo']}")
-                            st.markdown("🚦 **Stato:** 🔴 Occupata")
+                            st.markdown(f"👤 **Docente Incaricato:** `{dati_p['prof']}` *(Nome Completo)*")
+                            st.markdown(f"📝 **Descrizione Attività:** {dati_p['motivo']}")
+                            st.markdown("🚦 **Stato dell'aula:** 🔴 **Occupata regolarmente**")
                         elif st.session_state.target_studente in st.session_state.manutenzioni:
-                            st.markdown("👤 **Docente:** Ufficio Tecnico")
-                            st.markdown("📝 **Attività:** Sospensione tecnica / Manutenzione hardware")
-                            st.markdown("🚦 **Stato:** 🔧 Non disponibile per guasto")
+                            st.markdown("👤 **Responsabile:** `Ufficio Tecnico / Personale ATA`")
+                            st.markdown("📝 **Descrizione Attività:** Intervento urgente di manutenzione hardware/rete.")
+                            st.markdown("🚦 **Stato dell'aula:** 🔧 **NON ACCESSIBILE (GUASTO)**")
                         else:
-                            st.markdown("👤 **Docente:** Nessuno")
-                            st.markdown("📝 **Attività:** Nessuna attività programmata")
-                            st.markdown("🚦 **Stato:** 🟢 Libera")
+                            st.markdown("👤 **Docente Incaricato:** `Nessuno`")
+                            st.markdown("📝 **Descrizione Attività:** Nessuna lezione programmata. L'aula è vuota.")
+                            st.markdown("🚦 **Stato dell'aula:** 🟢 **LIBERA**")
+                    
+                    # --- INIEZIONE JAVASCRIPT PER LO SCROLL AUTOMATICO COMPORTAMENTALE ---
+                    if st.session_state.scroll_richiesto:
+                        st.components.v1.html("""
+                            <script>
+                                window.parent.document.getElementById('sezione_scheda_studente').scrollIntoView({behavior: 'smooth'});
+                            </script>
+                        """, height=0)
+                        st.session_state.scroll_richiesto = False # Resetta il trigger dello scroll
                 else:
-                    st.info("💡 Fai clic su un bottone qualsiasi del tabellone sopra per vederne i dettagli qui.")
+                    st.info("💡 Fai clic su un pulsante qualsiasi del tabellone sopra: la pagina scenderà da sola e ti mostrerà il nome completo del prof e la lezione.")
                 
                 st.divider()
                 st.write("#### 🔎 Vuoi fare una ricerca rapida?")
@@ -360,7 +376,6 @@ else:
                     if not trovato:
                         st.warning("Nessuna lezione trovata con questa chiave di ricerca per oggi.")
 
-            # Modulo revoche Admin
             if ruolo == "Tecnico / Amministratore" and st.session_state.target_admin_delete:
                 st.error("### ⚠️ Modulo di Cancellazione d'Ufficio (Amministratore)")
                 t_data, t_lab, t_ora = st.session_state.target_admin_delete
@@ -390,7 +405,6 @@ else:
                             st.session_state.target_admin_delete = None
                             st.rerun()
 
-            # Modulo Professore
             if ruolo == "Professore":
                 st.write("### ⚙️ Centro Operativo")
                 tab_desc, tab_scambio, tab_storico = st.tabs(["📝 Descrizione Ore", "🔄 Proponi Scambio d'Aula", "📋 Storico Richieste Inviate"])
