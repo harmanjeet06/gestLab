@@ -11,7 +11,7 @@ GOOGLE_SHEET_ID = "1T83Ofmcesg_YoYbKkLHM1LFaw0c72AHwo9QTPyIb0kM"
 URL_UTENTI = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=utenti"
 URL_STUDENTI = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=studenti"
 
-@st.cache_data(ttl=60)  # Mantiene i dati in cache per 60 secondi per non sovraccaricare Google Sheets
+@st.cache_data(ttl=60)
 def carica_utenti_da_sheets():
     try:
         df = pd.read_csv(URL_UTENTI)
@@ -36,7 +36,7 @@ def carica_classi_da_sheets():
         st.error(f"Errore nel caricamento delle classi da Google Sheets: {e}")
         return []
 
-# --- INIZIALIZZAZIONE DELLA SESSIONE (SICUREZZA RUOLI) ---
+# --- INIZIALIZZAZIONE DELLA SESSIONE ---
 if "autenticato" not in st.session_state:
     st.session_state.autenticato = False
 if "ruolo" not in st.session_state:
@@ -44,7 +44,7 @@ if "ruolo" not in st.session_state:
 if "utente_attivo" not in st.session_state:
     st.session_state.utente_attivo = None
 
-# Database temporaneo in memoria per le prenotazioni del giorno corrente
+# Database temporaneo in memoria
 if "prenotazioni" not in st.session_state:
     st.session_state.prenotazioni = {}
 if "scambi" not in st.session_state:
@@ -52,13 +52,22 @@ if "scambi" not in st.session_state:
 if "manutenzioni" not in st.session_state:
     st.session_state.manutenzioni = {}
 
-# Scarichiamo i dati dal Cloud di Google
+# Variabili di stato per la pre-selezione automatica tramite i pulsanti del tabellone
+if "lab_selezionato_click" not in st.session_state:
+    st.session_state.lab_selezionato_click = "Info"
+if "ora_selezionata_click" not in st.session_state:
+    st.session_state.ora_selezionata_click = "1ª ora"
+if "tab_attivo" not in st.session_state:
+    st.session_state.tab_attivo = 0
+
 dizionario_utenti = carica_utenti_da_sheets()
 elenco_classi = carica_classi_da_sheets()
 
 # --- COSTRUTTORE STRUTTURA ORARI ---
 GIORNI = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"]
-LABORATORI = ["Sistel Info", "AutoCAD"]
+# Aggiornamento: I 3 laboratori corretti
+LABORATORI = ["Info", "AutoCAD", "Sistel"]
+
 def get_orari_per_giorno(giorno):
     if giorno in ["Martedì", "Venerdì"]:
         return [
@@ -75,7 +84,7 @@ def get_orari_per_giorno(giorno):
             {"ora": "1ª ora", "inizio": "08:00", "fine": "09:00", "prenotabile": True},
             {"ora": "2ª ora", "inizio": "09:00", "fine": "10:00", "prenotabile": True},
             {"ora": "3ª ora", "inizio": "10:00", "fine": "10:55", "prenotabile": True},
-            {"ora": "Intervallo", "inizio": "10:55", "fine": "11:10", "prenotabile": False},  # <--- CORRETTO QUI!
+            {"ora": "Intervallo", "inizio": "10:55", "fine": "11:10", "prenotabile": False},
             {"ora": "4ª ora", "inizio": "11:10", "fine": "12:10", "prenotabile": True},
             {"ora": "5ª ora", "inizio": "12:10", "fine": "13:10", "prenotabile": True},
         ]
@@ -99,15 +108,12 @@ if not st.session_state.autenticato:
                 user_clean = username_input.strip()
                 pass_clean = password_input.strip()
                 
-                # --- CONTROLLO HARDCODED DI SICUREZZA PER L'ADMIN SUPREMO ---
                 if user_clean == "admin" and pass_clean == "admin":
                     st.session_state.autenticato = True
                     st.session_state.ruolo = "Tecnico / Amministratore"
                     st.session_state.utente_attivo = "Admin Supremo"
                     st.success("Accesso Amministratore locale sbloccato!")
                     st.rerun()
-                
-                # --- CONTROLLO STANDARD SUL DATABASE REMOTO GOOGLE SHEETS ---
                 elif user_clean in dizionario_utenti and dizionario_utenti[user_clean]["password"] == pass_clean:
                     st.session_state.autenticato = True
                     st.session_state.ruolo = dizionario_utenti[user_clean]["ruolo"]
@@ -115,12 +121,10 @@ if not st.session_state.autenticato:
                     st.success("Autenticato con successo!")
                     st.rerun()
                 else:
-                    st.error("Credenziali non corrette. Verifica i dati o contatta l'amministratore.")
+                    st.error("Credenziali non corrette.")
                     
     else:  # Studente
-        with st.form("form_studente"):
-            if not elenco_classi:
-                st.warning("Caricamento classi da Google Sheets in corso...")
+        with st.form("form_studentie"):
             classe_selezionata = st.selectbox("Seleziona la tua Classe (Verificata da Cloud):", elenco_classi)
             pulsante_studente = st.form_submit_button("Accedi al Tabellone")
             
@@ -132,27 +136,23 @@ if not st.session_state.autenticato:
                 st.rerun()
 
 # ==========================================
-# APPLICAZIONE (AUTENTICATA DA SESSIONE)
+# APPLICAZIONE ATTIVA
 # ==========================================
 else:
     ruolo = st.session_state.ruolo
     utente_attivo = st.session_state.utente_attivo
 
-    st.sidebar.title("🧬 GestLab v1.2")
-    st.sidebar.subheader("🔒 Sessione Sicura")
+    st.sidebar.title("🧬 GestLab v1.3")
     st.sidebar.write(f"Utente: **{utente_attivo}**")
     st.sidebar.write(f"Ruolo: `{ruolo}`")
     
     if st.sidebar.button("🚪 Esci dal sistema"):
         st.session_state.autenticato = False
-        st.session_state.ruolo = None
-        st.session_state.utente_attivo = None
         st.rerun()
         
     st.sidebar.divider()
     if st.sidebar.button("🔄 Forza Aggiornamento Database"):
-        st.cache_data.clear()  # Svuota la cache locale di Streamlit obbligandolo a ricaricare i dati da Google Sheets
-        st.sidebar.success("Dati aggiornati dal Cloud!")
+        st.cache_data.clear()
         st.rerun()
 
     st.title("🖥️ Tabellone Orari e Prenotazione Laboratori")
@@ -167,109 +167,146 @@ else:
 
     with col_data2:
         st.subheader(f"📅 Giorno: {giorno_testo} {data_selezionata.strftime('%d/%m/%Y')}")
-        if giorno_testo in ["Sabato", "Domenica"]:
-            st.warning("Laboratori chiusi nel fine settimana.")
 
     if giorno_testo in GIORNI:
         schema_orario = get_orari_per_giorno(giorno_testo)
 
-        st.write("### 📊 Disponibilità attuale slot orari")
-        col_orari, col_lab1, col_lab2 = st.columns([2, 4, 4])
+        st.write("### 📊 Disponibilità attuale (Clicca su uno slot per operare)")
+        
+        # Generazione dinamica colonne: 1 per gli orari + 3 per i laboratori
+        col_orari, col_l1, col_l2, col_l3 = st.columns([2, 3, 3, 3])
+        colonne_lab = [col_l1, col_l2, col_l3]
         
         with col_orari:
             st.write("**Ora / Fascia**")
             for slot in schema_orario:
-                st.write(f"🕒 **{slot['ora']}** ({slot['inizio']} - {slot['fine']})")
-                
-        with col_lab1:
-            st.write(f"🟩 **{LABORATORI[0]}**")
-            for slot in schema_orario:
-                chiave = (data_selezionata, LABORATORI[0], slot['ora'])
-                if not slot['prenotabile']: st.info("☕ Intervallo")
-                elif chiave in st.session_state.manutenzioni: st.error(f"🔧 MANUTENZIONE: {st.session_state.manutenzioni[chiave]}")
-                elif chiave in st.session_state.prenotazioni: st.warning(f"🔴 Occupato da {st.session_state.prenotazioni[chiave]['prof']}")
-                else: st.success("🟢 Libero")
+                st.write(f"🕒 **{slot['ora']}** \n ({slot['inizio']}-{slot['fine']})")
+                st.divider()
 
-        with col_lab2:
-            st.write(f"📐 **{LABORATORI[1]}**")
-            for slot in schema_orario:
-                chiave = (data_selezionata, LABORATORI[1], slot['ora'])
-                if not slot['prenotabile']: st.info("☕ Intervallo")
-                elif chiave in st.session_state.manutenzioni: st.error(f"🔧 MANUTENZIONE: {st.session_state.manutenzioni[chiave]}")
-                elif chiave in st.session_state.prenotazioni: st.warning(f"🔴 Occupato da {st.session_state.prenotazioni[chiave]['prof']}")
-                else: st.success("🟢 Libero")
+        # Ciclo sui 3 laboratori
+        for i_lab, laboratorio in enumerate(LABORATORI):
+            with colonne_lab[i_lab]:
+                st.write(f"🏢 **💻 {laboratorio}**")
+                
+                for slot in schema_orario:
+                    chiave = (data_selezionata, laboratorio, slot['ora'])
+                    
+                    if not slot['prenotabile']:
+                        st.button(f"☕ Intervallo", key=f"int_{laboratorio}_{slot['ora']}", disabled=True, use_container_width=True)
+                    
+                    elif chiave in st.session_state.manutenzioni:
+                        testo_pulsante = f"🔧 GUASTO: {st.session_state.manutenzioni[chiave]}"
+                        if st.button(testo_pulsante, key=f"btn_{chiave}", type="secondary", use_container_width=True):
+                            st.toast("Laboratorio fuori servizio.")
+                    
+                    elif chiave in st.session_state.prenotazioni:
+                        proprietario = st.session_state.prenotazioni[chiave]['prof']
+                        motivo_pren = st.session_state.prenotazioni[chiave]['motivo']
+                        
+                        if proprietario == utente_attivo:
+                            testo_pulsante = f"📋 Tuo ({motivo_pren}) \n [Clicca per Cancellare]"
+                            if st.button(testo_pulsante, key=f"btn_{chiave}", type="secondary", use_container_width=True):
+                                st.session_state.tab_attivo = 2 # Sposta sul tab "Mie Prenotazioni"
+                                st.rerun()
+                        else:
+                            testo_pulsante = f"🔴 {proprietario} \n ({motivo_pren}) [Chiedi Scambio]"
+                            if st.button(testo_pulsante, key=f"btn_{chiave}", type="secondary", use_container_width=True):
+                                st.session_state.lab_selezionato_click = laboratorio
+                                st.session_state.ora_selezionata_click = slot['ora']
+                                st.session_state.tab_attivo = 1 # Sposta sul tab "Richiedi Scambio"
+                                st.rerun()
+                    else:
+                        testo_pulsante = "🟢 LIBERO \n [Clicca per Prenotare]"
+                        if st.button(testo_pulsante, key=f"btn_{chiave}", type="primary", use_container_width=True):
+                            if ruolo == "Professore":
+                                st.session_state.lab_selezionato_click = laboratorio
+                                st.session_state.ora_selezionata_click = slot['ora']
+                                st.session_state.tab_attivo = 0 # Sposta sul tab "Nuova Prenotazione"
+                                st.rerun()
+                            else:
+                                st.toast("I sola lettura o gli admin non possono prenotare qui.")
+                st.divider()
 
         st.divider()
+        st.write("### ⚙️ Area Operativa")
 
+        # --- INTERFACCIA PROFESSORE ---
         if ruolo == "Professore":
             tab1, tab2, tab3 = st.tabs(["🆕 Nuova Prenotazione", "🔄 Richiedi Scambio", "📋 Mie Prenotazioni"])
             
+            # Forza l'apertura del tab corretto dopo il click sul tabellone
+            # Nota tecnica: usiamo session_state per gestire l'indice attivo indirettamente
             with tab1:
-                st.subheader("Blocca un laboratorio")
-                lab_scelto = st.selectbox("Seleziona Laboratorio:", LABORATORI)
-                ore_disponibili = [slot['ora'] for slot in schema_orario if slot['prenotabile']]
-                ora_scelta = st.selectbox("Seleziona Ora:", ore_disponibili)
-                motivo = st.text_input("Attività didattica prevista (Classe / Materia):")
+                st.subheader("Blocca uno slot libero")
+                lab_scelto = st.selectbox("Laboratorio:", LABORATORI, index=LABORATORI.index(st.session_state.lab_selezionato_click), key="sel_l")
+                ore_disp = [s['ora'] for s in schema_orario if s['prenotabile']]
+                ora_scelta = st.selectbox("Ora:", ore_disp, index=ore_disp.index(st.session_state.ora_selezionata_click), key="sel_o")
+                motivo = st.text_input("Attività didattica prevista (Classe / Materia):", key="act")
                 
-                if st.button("Salva Prenotazione", type="primary"):
+                if st.button("Salva Prenotazione", type="primary", key="save_p"):
                     chiave_pren = (data_selezionata, lab_scelto, ora_scelta)
-                    if chiave_pren in st.session_state.manutenzioni: st.error("Laboratorio bloccato dal tecnico.")
-                    elif chiave_pren in st.session_state.prenotazioni: st.error("Slot già occupato da un altro docente.")
-                    elif motivo.strip() == "": st.warning("Inserisci l'attività.")
+                    if chiave_pren in st.session_state.prenotazioni:
+                        st.error("Slot occupato frattanto.")
+                    elif motivo.strip() == "":
+                        st.warning("Inserisci l'attività.")
                     else:
                         st.session_state.prenotazioni[chiave_pren] = {"prof": utente_attivo, "motivo": motivo}
-                        st.success("Registrato con successo!")
+                        st.success("Registrato!")
                         st.rerun()
 
             with tab2:
                 st.subheader("Invia proposta di scambio")
-                lab_scambio = st.selectbox("Laboratorio oggetto dello scambio:", LABORATORI, key="s_l")
-                ora_scambio = st.selectbox("Ora:", [slot['ora'] for slot in schema_orario if slot['prenotabile']], key="s_o")
+                lab_scambio = st.selectbox("Laboratorio:", LABORATORI, index=LABORATORI.index(st.session_state.lab_selezionato_click), key="s_l")
+                ora_scambio = st.selectbox("Ora:", [s['ora'] for s in schema_orario if s['prenotabile']], index=[s['ora'] for s in schema_orario if s['prenotabile']].index(st.session_state.ora_selezionata_click), key="s_o")
                 chiave_scambio = (data_selezionata, lab_scambio, ora_scambio)
+                
                 if chiave_scambio in st.session_state.prenotazioni:
                     prof_dest = st.session_state.prenotazioni[chiave_scambio]['prof']
                     if prof_dest != utente_attivo:
-                        st.write(f"Slot occupato attualmente da: **{prof_dest}**")
+                        st.write(f"Slot occupato da: **{prof_dest}**")
                         msg = st.text_area("Messaggio cordiale per lo scambio:")
-                        if st.button("Spedisci richiesta di scambio"):
+                        if st.button("Spedisci richiesta", key="send_s"):
                             st.session_state.scambi.append({"da_prof": utente_attivo, "a_prof": prof_dest, "data": data_selezionata, "lab": lab_scambio, "ora": ora_scambio, "messaggio": msg, "stato": "In attesa"})
-                            st.success("Richiesta recapitata nel sistema.")
+                            st.success("Richiesta recapitata.")
                 else:
-                    st.info("Lo slot è vuoto, puoi prenderlo subito senza scambi.")
+                    st.info("Lo slot è vuoto, usa il primo pannello per bloccarlo.")
 
             with tab3:
                 st.subheader("Riepilogo ore prenotate a tuo nome")
-                for k, v in list(st.session_state.prenotazioni.items()):
-                    if v["prof"] == utente_attivo:
-                        st.write(f"• **{k[0].strftime('%d/%m/%Y')}** alla {k[2]} su {k[1]} (*{v['motivo']}*)")
-                        if st.button("Cancella", key=f"d_{k}"):
-                            del st.session_state.prenotazioni[k]
-                            st.rerun()
+                elenco_mie = [k for k, v in st.session_state.prenotazioni.items() if v["prof"] == utente_attivo]
+                if not elenco_mie:
+                    st.write("Non hai prenotazioni per questa giornata.")
+                for k in elenco_mie:
+                    st.write(f"• **{k[1]}** alla **{k[2]}** -> *{st.session_state.prenotazioni[k]['motivo']}*")
+                    if st.button("Elimina questa prenotazione", key=f"del_{k[1]}_{k[2]}"):
+                        del st.session_state.prenotazioni[k]
+                        st.rerun()
 
+        # --- INTERFACCIA STUDENTE ---
         elif ruolo == "Studente":
-            st.subheader("🔍 Motore di ricerca rapida aule per studenti")
-            st.info("Benvenuto. Puoi cercare dove si trova una determinata materia o classe inserendola qui sotto.")
-            testo_cercato = st.text_input("Inserisci stringa di ricerca (es. 5A o Sistemi):")
+            st.subheader("🔍 Motore di ricerca rapida per studenti")
+            testo_cercato = st.text_input("Inserisci classe o materia da cercare:")
             if testo_cercato:
                 trovato = False
                 for k, v in st.session_state.prenotazioni.items():
-                    if testo_cercato.lower() in v["motivo"].lower():
-                        st.write(f"📖 Il giorno **{k[0].strftime('%d/%m/%Y')}** alla **{k[2]}** la classe è nel laboratorio **{k[1]}** (Docente: {v['prof']})")
+                    if testo_cercato.lower() in v["motivo"].lower() and k[0] == data_selezionata:
+                        st.write(f"📖 Oggi alla **{k[2]}** siete nel laboratorio **{k[1]}** (Docente: {v['prof']})")
                         trovato = True
                 if not trovato:
-                    st.write("Nessuna lezione trovata con questi criteri.")
+                    st.write("Nessuna lezione trovata per i criteri inseriti in questa data.")
 
+        # --- INTERFACCIA AMMINISTRATORE ---
         elif ruolo == "Tecnico / Amministratore":
-            st.subheader("🔧 Gestione Sospensioni Tecniche / Manutenzioni Hardware")
-            lab_m = st.selectbox("Laboratorio:", LABORATORI)
-            ora_m = st.selectbox("Fascia oraria del blocco:", [slot['ora'] for slot in schema_orario if slot['prenotabile']])
-            motivo_m = st.text_input("Natura del guasto o intervento:")
+            st.subheader("🔧 Gestione Sospensioni Tecniche (Admin Supremo)")
+            lab_m = st.selectbox("Laboratorio da bloccare:", LABORATORI)
+            ora_m = st.selectbox("Fascia oraria del blocco:", [s['ora'] for s in schema_orario if s['prenotabile']])
+            motivo_m = st.text_input("Natura del guasto:")
             
-            if st.button("Applica Sospensione Laboratorio", type="primary"):
+            if st.button("Applica Sospensione", type="primary"):
                 if motivo_m.strip():
                     chiave_m = (data_selezionata, lab_m, ora_m)
                     if chiave_m in st.session_state.prenotazioni:
                         del st.session_state.prenotazioni[chiave_m]
                     st.session_state.manutenzioni[chiave_m] = motivo_m
-                    st.success("Laboratorio isolato e bloccato.")
+                    st.success("Slot isolato.")
                     st.rerun()
