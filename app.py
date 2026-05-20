@@ -46,7 +46,7 @@ def get_orari_per_giorno(giorno):
 # --- BARRA LATERALE: AUTENTICAZIONE SIMULATA ---
 st.sidebar.title("🧬 GestLab v1.0")
 st.sidebar.write("Progetto Scolastico 2024/2025")
-st.sidebar.hr()
+st.sidebar.divider()
 
 st.sidebar.subheader("🔑 Autenticazione")
 ruolo = st.sidebar.selectbox("Scegli il tuo Ruolo:", ["Professore", "Studente", "Tecnico / Amministratore"])
@@ -65,7 +65,7 @@ st.sidebar.success(f"Loggato come: **{utente_attivo}**")
 # --- TITOLO PRINCIPALE ---
 st.title("🖥️ Sistema Gestione Laboratori Scolastici")
 st.write(f"Benvenuto nel pannello di controllo. Ruolo attuale: **{ruolo}**")
-st.hr()
+st.divider()
 
 # --- SELEZIONE DATA E GIORNO ---
 col_data1, col_data2 = st.columns([1, 3])
@@ -127,7 +127,7 @@ if giorno_testo in GIORNI:
             else:
                 st.success("🟢 Libero")
 
-    st.hr()
+    st.divider()
 
     # ==========================================
     # INTERFACCIA 1: PROFESSORE
