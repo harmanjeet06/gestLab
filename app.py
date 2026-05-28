@@ -7,77 +7,85 @@ import json
 # --- CONFIGURAZIONE PAGINA ---
 st.set_page_config(page_title="SmartLab Scarpa", layout="wide", initial_sidebar_state="expanded")
 
-# --- INSERIMENTO LOGO DELLA SCUOLA (OTTIMIZZAZIONE SVG/VETTORIALE) ---
-# Se hai scaricato l'SVG ufficiale, inserisci il codice XML o caricalo direttamente.
-# Qui usiamo un'iniezione HTML scalabile per garantire la massima nitidezza su ogni display.
-st.markdown("""
-<div style="text-align: center; padding: 10px; background-color: transparent; border-bottom: 2px solid #f0f2f6; margin-bottom: 20px;">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 100" width="100%" height="auto">
-        <text x="20" y="55" font-family="Arial, sans-serif" font-size="32" font-weight="bold" fill="#003366">Istituto Superiore</text>
-        <text x="290" y="55" font-family="Arial, sans-serif" font-size="32" font-weight="bold" fill="#800000">"Antonio Scarpa"</text>
-        <text x="20" y="85" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#555">🏛️ MOTTA DI LIVENZA | ODERZO</text>
-        <text x="600" y="70" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#00cc66">⚡ SMARTLAB</text>
-    </svg>
-</div>
-""", unsafe_allow_html=True)
-
-# --- CSS AVANZATO: UI/UX, MICRO-ANIMAZIONI ED EFFETTI HOVER/ACTIVE ---
+# --- CSS AVANZATO: UI/UX, MOVIMENTI SMOOTH E MICRO-ANIMAZIONI ---
 st.markdown("""
 <style>
+    /* ABILITAZIONE MOVIMENTO LISCIO (SMOOTH SCROLLING) SU TUTTA LA PAGINA */
+    html {
+        scroll-behavior: smooth !important;
+    }
+
     /* Transizioni fluide globali per tutti i pulsanti dell'applicazione */
     div.stButton > button {
-        transition: all 0.3s ease-in-out !important;
+        transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
         border-radius: 8px !important;
         font-weight: 600 !important;
     }
     
-    /* STATO VERDE (LIBERO) - Micro-animazione al passaggio e al click */
+    /* STATO VERDE (LIBERO) - Micro-animazione reattiva e fluida */
     div.stButton > button[data-testid="baseButton-primary"] {
         background-color: #2e7d32 !important;
         color: white !important;
         border: 1px solid #2e7d32 !important;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.08);
     }
-    /* Hover state: schiarisce leggermente e si solleva */
+    /* Hover state: schiarisce in dissolvenza e si solleva delicatamente */
     div.stButton > button[data-testid="baseButton-primary"]:hover {
         background-color: #1b5e20 !important;
-        transform: translateY(-2px) scale(1.02) !important;
-        box-shadow: 0 4px 8px rgba(46, 125, 50, 0.3) !important;
+        transform: translateY(-3px) scale(1.015) !important;
+        box-shadow: 0 6px 12px rgba(46, 125, 50, 0.25) !important;
     }
-    /* Active state: effetto click premuto verso il basso */
+    /* Active state: effetto click morbido pressato verso il basso */
     div.stButton > button[data-testid="baseButton-primary"]:active {
         transform: translateY(1px) scale(0.98) !important;
     }
 
-    /* STATO ROSSO (OCCUPATO / GUASTO) - Micro-animazione */
+    /* STATO ROSSO (OCCUPATO / GUASTO) - Transizione fluida */
     div.stButton > button[data-testid="baseButton-secondary"] {
         background-color: #c62828 !important;
         color: white !important;
         border: 1px solid #c62828 !important;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.08);
     }
     /* Hover state */
     div.stButton > button[data-testid="baseButton-secondary"]:hover {
         background-color: #b71c1c !important;
-        transform: translateY(-2px) scale(1.02) !important;
-        box-shadow: 0 4px 8px rgba(198, 40, 40, 0.3) !important;
+        transform: translateY(-3px) scale(1.015) !important;
+        box-shadow: 0 6px 12px rgba(198, 40, 40, 0.25) !important;
     }
     /* Active state */
     div.stButton > button[data-testid="baseButton-secondary"]:active {
         transform: translateY(1px) scale(0.98) !important;
     }
     
-    /* Layout Sticky per le intestazioni dei laboratori */
-    .sticky-header {
-        position: -webkit-sticky;
-        position: sticky;
-        top: 0;
-        background-color: #ffffff;
-        z-index: 99;
-        padding: 10px 0;
-        border-bottom: 2px solid #edf2f7;
+    /* Animazione di entrata fluida (fade-in) per le schede informative in basso */
+    .stAlert, .element-container {
+        animation: fadeIn 0.6s cubic-bezier(0.25, 0.8, 0.25, 1);
+    }
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
     }
 </style>
+""", unsafe_allow_html=True)
+
+# --- INSERIMENTO LOGO DELLA SCUOLA (DA ASSET PUBBLICO DEL SITO SCARPA) ---
+# Mostra l'intestazione grafica istituzionale prelevata direttamente dal template web ufficiale dell'istituto
+st.markdown("""
+<div style="text-align: center; padding: 15px 0; background-color: #ffffff; border-bottom: 3px solid #003366; margin-bottom: 25px; border-radius: 4px;">
+    <table style="margin: 0 auto; border: none; background: transparent;">
+        <tr style="background: transparent; border: none;">
+            <td style="padding-right: 20px; border: none; vertical-align: middle;">
+                <img src="https://www.antonioscarpa.edu.it/images/logo.png" alt="Logo Istituto Scarpa" style="height: 75px; width: auto; max-width: 100%;">
+            </td>
+            <td style="text-align: left; border: none; vertical-align: middle;">
+                <h2 style="margin: 0; color: #003366; font-family: 'Arial', sans-serif; font-size: 26px; font-weight: bold; letter-spacing: 0.5px;">Istituto Statale di Istruzione Superiore</h2>
+                <h1 style="margin: 3px 0 0 0; color: #800000; font-family: 'Arial', sans-serif; font-size: 32px; font-weight: bold;">“Antonio Scarpa”</h1>
+                <p style="margin: 5px 0 0 0; color: #555555; font-family: 'Arial', sans-serif; font-size: 14px; font-weight: 600; text-transform: uppercase;">Motta di Livenza | Oderzo — <span style="color: #2e7d32;">⚡ SmartLab Platform</span></p>
+            </td>
+        </tr>
+    </table>
+</div>
 """, unsafe_allow_html=True)
 
 # --- UTILITY DATABASE PERSISTENTE ---
@@ -141,10 +149,6 @@ if "ruolo" not in st.session_state: st.session_state.ruolo = None
 if "utente_attivo" not in st.session_state: st.session_state.utente_attivo = None
 if "prenotazioni" not in st.session_state: st.session_state.prenotazioni = carica_prenotazioni_da_disco()
 if "manutenzioni" not in st.session_state: st.session_state.manutenzioni = {}
-if "scambi" not in st.session_state: st.session_state.scambi = []
-if "notifiche_sistema" not in st.session_state: st.session_state.notifiche_sistema = []
-if "target_scambio" not in st.session_state: st.session_state.target_scambio = None
-if "target_admin_delete" not in st.session_state: st.session_state.target_admin_delete = None
 if "target_studente" not in st.session_state: st.session_state.target_studente = None
 
 dizionario_utenti = carica_utenti_da_sheets()
@@ -194,11 +198,12 @@ def gestisci_manutenzione(chiave, azione):
         if chiave in st.session_state.manutenzioni:
             del st.session_state.manutenzioni[chiave]
 
-def mostra_dettagli_studente(chiave): st.session_state.target_studente = chiave
-def prepara_admin_delete(chiave): st.session_state.target_admin_delete = chiave
-def prepara_scambio(chiave): st.session_state.target_scambio = chiave
+def mostra_dettagli_studente(chiave): 
+    st.session_state.target_studente = chiave
 
-# --- LOG LOGIC DI LOG IN (INVARIATO) ---
+# ==========================================
+# GESTIONE LOGIN (INVARIATO PER SICUREZZA)
+# ==========================================
 if not st.session_state.autenticato:
     st.title("🔐 Accesso Centrale - SmartLab")
     scelta_accesso = st.radio("Scegli come accreditarti:", ["Docente / Personale Tecnico", "Studente (Consulta Orari)"])
@@ -232,8 +237,7 @@ else:
     ruolo = st.session_state.ruolo
     utente_attivo = st.session_state.utente_attivo
 
-    # Sidebar laterale
-    st.sidebar.title("🧬 SmartLab Scarpa v3.0")
+    st.sidebar.title("🧬 SmartLab Scarpa v3.1")
     st.sidebar.write(f"Utente: **{utente_attivo}**")
     st.sidebar.write(f"Ruolo: `{ruolo}`")
     if st.sidebar.button("🚪 Esci dal sistema", use_container_width=True):
@@ -256,8 +260,7 @@ else:
         if giorno_testo in GIORNI:
             schema_orario = get_orari_per_giorno(giorno_testo)
 
-            # --- IMPLEMENTAZIONE DEL FEEDBACK: BADGE DINAMICI DI STATO NELL'INTESTAZIONE ---
-            # Calcoliamo quante ore oggi sono occupate in tempo reale per assegnare il badge di disponibilità
+            # Calcolo dei Badge Dinamici richiesti per l'Intestazione delle Tab
             ore_occupate = {lab: 0 for lab in LABORATORI}
             for chiave_p in st.session_state.prenotazioni.keys():
                 if chiave_p[0] == data_selezionata:
@@ -267,7 +270,7 @@ else:
             badge_autocad = "🟢 Libero" if ore_occupate["AutoCAD"] < 3 else "🟡 Alta Affluenza"
             badge_sistel = "🟢 Libero" if ore_occupate["Sistel"] < 3 else "🟡 Alta Affluenza"
 
-            # Intestazione Colonne (Simulazione layout Sticky reattivo)
+            # Intestazione delle colonne
             col_orari, col_l1, col_l2, col_l3 = st.columns([3, 3, 3, 3])
             with col_orari: st.markdown("**🕒 Ora / Fascia**")
             with col_l1: st.markdown(f"**💻 Laboratorio Info** <br><span style='font-size:12px; color:gray;'>Stato: {badge_info}</span>", unsafe_allow_html=True)
@@ -275,7 +278,7 @@ else:
             with col_l3: st.markdown(f"**🔌 Reparto Sistel** <br><span style='font-size:12px; color:gray;'>Stato: {badge_sistel}</span>", unsafe_allow_html=True)
             st.divider()
 
-            # Ciclo di rendering delle righe orarie
+            # Righe del tabellone orario
             for slot in schema_orario:
                 riga_ora, riga_l1, riga_l2, riga_l3 = st.columns([3, 3, 3, 3])
                 with riga_ora: st.write(f"**{slot['ora']}** \n({slot['inizio']}-{slot['fine']})")
@@ -304,12 +307,11 @@ else:
                                 st.button("🟢 LIBERO \n[Dettagli]", key=f"btn_{chiave}", type="primary", use_container_width=True, on_click=mostra_dettagli_studente, args=(chiave,))
             st.write("---")
 
-            # --- VALORE AGGIUNTO: INTEGRAZIONE ASSISTENTE AI MANUTENZIONE PREDITTIVA ---
+            # --- ASSISTENTE AI MANUTENZIONE PREDITTIVA ---
             if ruolo == "Tecnico / Amministratore":
                 st.write("### 🔮 Assistente AI: Manutenzione Predittiva & Telemetria")
                 st.info("L'algoritmo predittivo AI analizza i carichi di lavoro e lo storico di telemetria memorizzato per prevenire i guasti hardware.")
                 
-                # Calcolo statistico dell'usura basato sul numero totale di prenotazioni nel file JSON
                 totale_ore_laboratori = {"Info": 0, "AutoCAD": 0, "Sistel": 0}
                 for chiave_p in st.session_state.prenotazioni.keys():
                     lab_nome = chiave_p[1]
@@ -317,31 +319,28 @@ else:
                         totale_ore_laboratori[lab_nome] += 1
                 
                 c_ai1, c_ai2, c_ai3 = st.columns(3)
-                soglia_critica = 5  # Numero di ore fittizie per il test per attivare l'avviso AI
+                soglia_critica = 5
                 
                 with c_ai1:
-                    st.metric("Usura Stimata Lab Info", f"{totale_ore_laboratori['Info'] * 8}%", help="Calcolata sul carico ore annuo")
+                    st.metric("Usura Stimata Lab Info", f"{totale_ore_laboratori['Info'] * 8}%")
                     if totale_ore_laboratori["Info"] >= soglia_critica:
                         st.error("⚠️ AI Alert: Usura ventole/filtri alta. Pianificare manutenzione entro 3 giorni.")
-                    else:
-                        st.success("✅ Stato Hardware Ottimale")
+                    else: st.success("✅ Stato Hardware Ottimale")
                         
                 with c_ai2:
-                    st.metric("Usura Stimata Aula AutoCAD", f"{totale_ore_laboratori['AutoCAD'] * 12}%", help="Calcolata sulle sessioni di rendering GPU")
+                    st.metric("Usura Stimata Aula AutoCAD", f"{totale_ore_laboratori['AutoCAD'] * 12}%")
                     if totale_ore_laboratori["AutoCAD"] >= soglia_critica:
                         st.error("⚠️ AI Alert: Rilevato stress termico sulle GPU. Consigliato controllo pasta termica.")
-                    else:
-                        st.success("✅ Stato Hardware Ottimale")
+                    else: st.success("✅ Stato Hardware Ottimale")
                         
                 with c_ai3:
-                    st.metric("Usura Stimata Reparto Sistel", f"{totale_ore_laboratori['Sistel'] * 5}%", help="Calcolata sull'attivazione dei banchi prova")
+                    st.metric("Usura Stimata Reparto Sistel", f"{totale_ore_laboratori['Sistel'] * 5}%")
                     if totale_ore_laboratori["Sistel"] >= soglia_critica:
                         st.error("⚠️ AI Alert: Verificare taratura degli oscilloscopi digitali.")
-                    else:
-                        st.success("✅ Stato Hardware Ottimale")
+                    else: st.success("✅ Stato Hardware Ottimale")
                 st.divider()
 
-            # Visualizzazione dettagli studente in basso (Invariato)
+            # Scheda Informativa reattiva (Dotata di animazione Fade-In via CSS)
             if st.session_state.target_studente:
                 with st.container(border=True):
                     st.write(f"#### Dettagli slot selezionato: {st.session_state.target_studente[1]} ({st.session_state.target_studente[2]})")
@@ -351,7 +350,6 @@ else:
                     else:
                         st.write("🟢 L'aula risulta attualmente libera e disponibile per la didattica.")
 
-    # COLONNA NOTIFICHE (INVARIATO)
     with col_notifiche_destra:
         st.write("### 🔔 Bacheca")
         st.caption("Notifiche e comunicazioni d'istituto in tempo reale.")
